@@ -1,0 +1,15 @@
+{
+  "name": "example-project",
+  "version": "0.0.1",
+  "description": "Usage example of Query Wrapper",
+  "main": "index.js",
+  "type": "module",
+  "license": "Apache-2.0",
+  "private": true,
+  "scripts": {
+    "example": "node index.js"
+  },
+  "dependencies": {
+    "@neo4j-labs/experimental-query-api-wrapper": "../"
+  }
+}
