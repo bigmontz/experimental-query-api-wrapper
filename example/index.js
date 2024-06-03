@@ -14,26 +14,23 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// tag::code[]
 import neo4j from '@neo4j-labs/experimental-query-api-wrapper'
 
-const wrapper = neo4j.wrapper('http://localhost:7474', neo4j.auth.basic('neo4j', 'password'), {
-    logging: neo4j.logging.console('debug'),
-    useBigInt: true,
-})
-
-await wrapper.verifyConnectivity({ database: 'neo4j'})
+const wrapper = neo4j.wrapper('http://localhost:7474', neo4j.auth.basic('neo4j', 'password'))
 
 const session = wrapper.session({ database: 'neo4j', defaultAccessMode: 'READ' })
 
 try {
-    const { records, summary } = await session.run('MATCH (people:Person)-[relatedTo]-(:Movie {title: "Cloud Atlas"}) RETURN people.name, Type(relatedTo), relatedTo')
-    console.log('Summary', summary)
-
+    const { records, summary } = await session.run('MATCH (p:Person) RETURN p')
+    
     for (const record of records) {
-        console.log('Record', record)
+        console.log('Person', record.get('p').properties)
     }
 
+    console.log('Summary', summary)
 } finally {
     await session.close()
     await wrapper.close()
 }
+// end::code[]

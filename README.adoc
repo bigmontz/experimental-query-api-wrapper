@@ -1,0 +1,24 @@
+= experimental-query-api-wrapper
+
+WARNING: This is an experiment which should not be used in production environments. Use in your own risk.
+
+Experimental wrapper library to access Neo4j Query API using a neo4j-driver-like interface.
+
+== Quickstart
+
+Requirements:
+```
+Node >= 18
+```
+
+Installation:
+
+ $ npm i @neo4j-labs/experimental-query-api-wrapper --save
+
+Usage:
+
+.example.js
+[source,javascript]
+----
+include::./example/index.js[tag=code]
+----
