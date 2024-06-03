@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-// tag::code[]
 import neo4j from '@neo4j-labs/experimental-query-api-wrapper'
 
 const wrapper = neo4j.wrapper('http://localhost:7474', neo4j.auth.basic('neo4j', 'password'))
@@ -33,4 +32,3 @@ try {
     await session.close()
     await wrapper.close()
 }
-// end::code[]
