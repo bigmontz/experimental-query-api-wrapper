@@ -56,7 +56,7 @@ export default class HttpConnection extends Connection {
             highRecordWatermark: config?.highRecordWatermark ?? Number.MAX_SAFE_INTEGER,
             lowRecordWatermark: config?.lowRecordWatermark ?? Number.MIN_SAFE_INTEGER,
             afterComplete: config?.afterComplete,
-            server: this._address
+            server: this._address,
         })
 
         const requestCodec = new QueryRequestCodec(
