@@ -15,17 +15,17 @@ jobs:
       node-version: [18.x, 20.x]
 
   steps:
-  - name: Checkout code
-    uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-  - name: Use Node.js ${{ matrix.node-version }}
-    uses: actions/setup-node@v4
-    with:
-      node-version: ${{ matrix.node-version }}
-      cache: 'yarn'
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
 
-  - name: Install Node.js dependencies
-    run: yarn install --frozen-lockfile 
+    - name: Install Node.js dependencies
+      run: yarn install --frozen-lockfile 
 
-  - name: Run Unit Tests
-    run: yarn test::unit
+    - name: Run Unit Tests
+      run: yarn test::unit
