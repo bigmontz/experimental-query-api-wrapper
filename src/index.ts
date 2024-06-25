@@ -189,7 +189,6 @@ function wrapper (
   return new WrapperImpl(driver)
 
   function createConnectionProviderFunction (): (id: number, config: Config, log: Logger, hostNameResolver: ConfiguredCustomResolver) => ConnectionProvider {
-    
       return (
         id: number,
         config: InternalConfig,
