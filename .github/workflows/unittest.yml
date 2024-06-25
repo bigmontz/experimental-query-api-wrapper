@@ -17,13 +17,10 @@ jobs:
         - 20.x
   steps:
     - uses: actions/checkout@v4
-      name: Clone
-    - name: Use Node.js ${{ matrix.node-version }}
+    - name: Unittest on Node ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: yarn
-    - name: Install Node.js dependencies
-      run: yarn install --frozen-lockfile
-    - name: Run Unit Tests
-      run: yarn test::unit
+    - run: yarn install --frozen-lockfile
+    - run: yarn test::unit
