@@ -34,7 +34,7 @@ describe('minimum requirement', () => {
       `http://${Config.hostname}:${Config.httpPort}`,
       neo4j.auth.basic(Config.username, Config.password)
     )
-  })
+  }, 120_000) // long timeout since it may need to download docker image
 
   afterEach(async () => {
     await wrapper?.close()
