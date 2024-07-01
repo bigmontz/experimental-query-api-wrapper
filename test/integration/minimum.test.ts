@@ -23,7 +23,7 @@ describe('minimum requirement', () => {
 
   beforeAll(async () => {
     await Config.startNeo4j()
-  }, 20000)
+  }, 120_000) // long timeout since it may need to download docker image
 
   afterAll(async () => {
     await Config.stopNeo4j()
@@ -34,7 +34,7 @@ describe('minimum requirement', () => {
       `http://${Config.hostname}:${Config.httpPort}`,
       neo4j.auth.basic(Config.username, Config.password)
     )
-  }, 120_000) // long timeout since it may need to download docker image
+  })
 
   afterEach(async () => {
     await wrapper?.close()
