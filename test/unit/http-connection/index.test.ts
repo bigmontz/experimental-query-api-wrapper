@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import * as exported from "../../src/http-connection"
+import * as exported from "../../../src/http-connection"
 import { ConnectionProvider } from "neo4j-driver-core"
 
 describe('export', () => {
