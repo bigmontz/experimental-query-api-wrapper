@@ -161,7 +161,6 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
         }
 
         if (this._afterComplete) {
-            console.log('afterComplete', completionMetadata)
             this._afterComplete(completionMetadata)
         }
 

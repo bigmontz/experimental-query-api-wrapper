@@ -51,7 +51,7 @@ export default class HttpConnectionProvider extends ConnectionProvider {
     async acquireConnection(param?: { accessMode?: string | undefined; database?: string | undefined; bookmarks: internal.bookmarks.Bookmarks; impersonatedUser?: string | undefined; onDatabaseNameResolved?: ((databaseName?: string | undefined) => void) | undefined; auth?: types.AuthToken | undefined } | undefined): Promise<Connection & Releasable> {
         const auth = param?.auth ?? await this._authTokenManager.getToken()
         
-        return new HttpConnection({ release: async () => console.log('release'), auth, address: this._address, database: (param?.database ?? 'neo4j'), scheme: this._scheme, config: this._config }) 
+        return new HttpConnection({ release: async () => {}, auth, address: this._address, database: (param?.database ?? 'neo4j'), scheme: this._scheme, config: this._config }) 
     }
 
 

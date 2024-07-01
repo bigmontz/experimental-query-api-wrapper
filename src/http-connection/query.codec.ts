@@ -255,19 +255,19 @@ export class QueryResponseCodec {
 
     _decodeTime(value: string): Time<Integer | bigint | number> {
         // 12:50:35.556+01:00
-        const [hourStr, minuteString, secondMillisecondAndOffsetString, offsetMinuteString] = value.split(':')
-        const [secondStr, millisecondAndOffsetString] = secondMillisecondAndOffsetString.split('.')
+        const [hourStr, minuteString, secondNanosecondAndOffsetString, offsetMinuteString] = value.split(':')
+        const [secondStr, nanosecondAndOffsetString] = secondNanosecondAndOffsetString.split('.')
 
         // @ts-expect-error
-        const [millisecondString, offsetHourString, isPositive]: [string, string, boolean] = millisecondAndOffsetString.indexOf('+') >= 0 ?
-            [...millisecondAndOffsetString.split('+'), true] : (
-                millisecondAndOffsetString.indexOf('-') >= 0 ?  
-                    [...millisecondAndOffsetString.split('-'), false] :
-                    [millisecondAndOffsetString.slice(0, millisecondAndOffsetString.length - 1), '0', true]
+        const [nanosecondString, offsetHourString, isPositive]: [string, string, boolean] = nanosecondAndOffsetString.indexOf('+') >= 0 ?
+            [...nanosecondAndOffsetString.split('+'), true] : (
+                nanosecondAndOffsetString.indexOf('-') >= 0 ?  
+                    [...nanosecondAndOffsetString.split('-'), false] :
+                    [nanosecondAndOffsetString.slice(0, nanosecondAndOffsetString.length - 1), '0', true]
             )
 
 
-        let nanosecond = int(millisecondString).multiply(1000000)
+        let nanosecond = int(nanosecondString.padEnd(9, '0'))
 
         const timeZoneOffsetInSeconds = int(offsetHourString).multiply(60).add(int(offsetMinuteString)).multiply(60).multiply(isPositive ? 1 : -1)
         return new Time(
@@ -280,7 +280,7 @@ export class QueryResponseCodec {
 
     _decodeDate(value: string): Date<Integer | bigint | number> {
         // 2015-03-26
-        const [yearStr, monthStr, dayStr] = value.split(value)
+        const [yearStr, monthStr, dayStr] = value.split('-')
         return new Date(
             this._decodeInteger(yearStr),
             this._decodeInteger(monthStr),
@@ -290,9 +290,9 @@ export class QueryResponseCodec {
 
     _decodeLocalTime(value: string): LocalTime<Integer | bigint | number> {
         // 12:50:35.556
-        const [hourStr, minuteString, secondMillisecondAndOffsetString] = value.split(':')
-        const [secondStr, millisecondString] = secondMillisecondAndOffsetString.split('.')
-        const nanosecond = int(millisecondString).multiply(1000000)
+        const [hourStr, minuteString, secondNanosecondAndOffsetString] = value.split(':')
+        const [secondStr, nanosecondString] = secondNanosecondAndOffsetString.split('.')
+        const nanosecond = int(nanosecondString.padEnd(9, '0'))
 
         return new LocalTime(
             this._decodeInteger(hourStr),
@@ -368,33 +368,36 @@ export class QueryResponseCodec {
         let month = '0'
         let day = 'O'
         let second = '0'
+        let nanosecond = '0'
         let currentNumber = ''
         let timePart = false
 
         for (const ch of durationStringWithP) {
-            if (ch >= '0' && ch <= '9') {
+            if (ch >= '0' && ch <= '9' || ch === '.') {
                 currentNumber = currentNumber + ch
             } else {
                 switch(ch) {
                     case 'M':
                         if (timePart) {
-                            throw newError(`Unexpected Duration component ${ch} in date part`, error.PROTOCOL_ERROR)
+                            throw newError(`Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
                         }
                         month = currentNumber
                         break;
                     case 'D':
-                        if (!timePart) {
+                        if (timePart) {
                             throw newError(`Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
                         }
                         day = currentNumber
                         break
                     case 'S':
                         if (!timePart) {
-                            throw newError(`Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
+                            throw newError(`Unexpected Duration component ${ch} in date part`, error.PROTOCOL_ERROR)
                         }
-                        second = currentNumber
+                        [second, nanosecond] = currentNumber.split('.')
+                        break
                     case 'T':
                         timePart = true
+                        break
                     default:
                         throw newError(`Unexpected Duration component ${ch}`, error.PROTOCOL_ERROR)
                 }
@@ -402,12 +405,12 @@ export class QueryResponseCodec {
             }
         }
 
+        const nanosecondString = nanosecond ?? '0'
         return new Duration(
             this._decodeInteger(month),
             this._decodeInteger(day),
             this._decodeInteger(second),
-            // nano not present
-            this._decodeInteger('0')
+            this._decodeInteger(nanosecondString.padEnd(9, '0'))
         )
     }
 
@@ -566,7 +569,7 @@ export class QueryRequestCodec {
             return { $type: 'Integer', _value: value.toString()}
         } else if (isInt(value)) {
             return { $type: 'Integer', _value: value.toString() }
-        } else if (value instanceof Int8Array) {
+        } else if (value instanceof Uint8Array) {
             return { $type: 'Base64', _value: btoa(String.fromCharCode.apply(null, value))}
         } else if (value instanceof Array) {
             return { $type: 'List', _value: value.map(this._encodeValue.bind(this))}
