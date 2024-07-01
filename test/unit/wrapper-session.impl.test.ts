@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import WrapperSessionImpl from "../src/wrapper-session.impl"
+import WrapperSessionImpl from "../../src/wrapper-session.impl"
 import { Result, Session } from "neo4j-driver-core"
 
 
