@@ -33,6 +33,7 @@ const testcontainersDisabled = env.TEST_CONTAINERS_DISABLED !== undefined
   ? env.TEST_CONTAINERS_DISABLED.toUpperCase() === 'TRUE'
   : false
 
+const database = 'neo4j'
 const cluster = env.TEST_NEO4J_IS_CLUSTER === '1'
 
 const neo4jContainer = new Neo4jContainer(username, password, version, edition, testcontainersDisabled, printContainerLogs)
@@ -43,6 +44,7 @@ export default {
   hostname,
   scheme,
   cluster,
+  database,
   get testNonClusterSafe () {
     return cluster ? test.skip.bind(test) : test
   },

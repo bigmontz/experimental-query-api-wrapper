@@ -84,7 +84,6 @@ export default class HttpConnection extends Connection {
             })
             .catch((error) => observer.onError(error))
             .then(async ([contentType, rawQueryResponse]: [string, RawQueryResponse]) => {
-                console.log(JSON.stringify(rawQueryResponse, undefined, 4))
                 if (rawQueryResponse == null) {
                     // is already dead
                     return
