@@ -172,6 +172,21 @@ describe('minimum requirement', () => {
     }
   })
 
+  it.each([
+    ['CARTESIAN Point 2D', 'point({x: 2.3, y: 4.5})', new Point(int(7203), 2.3, 4.5)],
+    ['CARTESIAN Point 3D', 'point({x: 2.3, y: 4.5, z:7.5})', new Point(int(9157), 2.3, 4.5, 7.5)],
+    ['WGS Point 2D', 'point({longitude: 12.78, latitude: 56.7})', new Point(int(4326), 12.78, 56.7)],
+    ['WGS Point 3D', 'point({longitude: 12.78, latitude: 56.7, height: 120.57})', new Point(int(4979), 12.78, 56.7, 120.57)]
+  ])('should be able to echo "%s" (%s)', async (_, statement, expectedOutput) => {
+    const session = wrapper.session({ database: config.database })
+    try {
+      const { records: [first] } = await session.run(`RETURN ${statement} as output`)
+      expect(first.get('output')).toEqual(expectedOutput) 
+    } finally {
+      await session.close()
+    }
+  })
+
   function v<T, K = T>(value: T, mapper: (value: T)=> K = (v) => v as unknown as K): [T, K] {
     return [value, mapper(value)]
   }
