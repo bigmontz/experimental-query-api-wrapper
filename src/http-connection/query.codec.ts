@@ -182,7 +182,7 @@ export class QueryResponseCodec {
                                     .map(([k, v]) => [k, this._decodeValue(v as RawQueryValue)]))
                                 break
                             case 'records':
-                                actualKey = 'row'
+                                actualKey = 'rows'
                                 break 
                             default:
                                 break

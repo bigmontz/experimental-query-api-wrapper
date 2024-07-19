@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 import config from './config'
-import neo4j, { Date, DateTime, Duration, LocalDateTime, LocalTime, Plan, Point, Time, Wrapper, WrapperSession, WrapperSessionConfig, int } from '../../src'
+import neo4j, { Date, DateTime, Duration, LocalDateTime, LocalTime, Plan, Point, ProfiledPlan, Time, Wrapper, WrapperSession, WrapperSessionConfig, int } from '../../src'
 
 const NESTED_OBJECT = { 
   a: { 
@@ -255,6 +255,67 @@ describe('minimum requirement', () => {
       })
 
       expect(child.children.length).toBe(0)
+    }
+  })
+
+  it('should be able to return ResultSummary.profile',async () => {
+    for await (const session of withSession({ database: config.database })) {
+      const { summary} = await session.run('PROFILE RETURN 1')
+
+      expect(summary.profile).not.toBe(false)
+      
+      const profile: ProfiledPlan = summary.profile as ProfiledPlan
+      expect(profile.dbHits).toEqual(0)
+      expect(profile.identifiers).toEqual(['`1`'])
+      expect(profile.operatorType).toEqual('ProduceResults@neo4j')
+      expect(profile.pageCacheHitRatio).toEqual(0.0)
+      expect(profile.pageCacheHits).toEqual(0)
+      expect(profile.pageCacheMisses).toEqual(0)
+      expect(profile.rows).toEqual(1)
+      expect(profile.time).toEqual(0)
+      expect(profile.arguments).toEqual({
+        "GlobalMemory": int(312),
+        "planner-impl": "IDP",
+        "Memory": int(0),
+        "string-representation": "Planner COST\n\nRuntime PIPELINED\n\nRuntime version 5.21\n\nBatch size 128\n\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n| Operator        | Id | Details           | Estimated Rows | Rows | DB Hits | Memory (Bytes) | Page Cache Hits/Misses | Time (ms) | Pipeline            |\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n| +ProduceResults |  0 | `1`               |              1 |    1 |       0 |              0 |                        |           |                     |\n| |               +----+-------------------+----------------+------+---------+----------------+                        |           |                     |\n| +Projection     |  1 | $autoint_0 AS `1` |              1 |    1 |       0 |                |                    0/0 |     0.000 | Fused in Pipeline 0 |\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n\nTotal database accesses: 0, total allocated memory: 312\n",
+        "runtime": "PIPELINED",
+        "runtime-impl": "PIPELINED",
+        "DbHits": int(0),
+        "batch-size": int(128),
+        "Details": "`1`",
+        "planner-version": "5.21",
+        "PipelineInfo": "Fused in Pipeline 0",
+        "runtime-version": "5.21",
+        "Id": int(0),
+        "EstimatedRows": 1.0,
+        "planner": "COST",
+        "Rows": int(1)
+      })
+
+      expect(profile.children.length).toEqual(1)
+
+      const [child] = profile.children
+      expect(child.dbHits).toEqual(0)
+      expect(child.identifiers).toEqual(['`1`'])
+      expect(child.operatorType).toEqual('Projection@neo4j')
+      expect(child.pageCacheHitRatio).toEqual(0.0)
+      expect(child.pageCacheHits).toEqual(0)
+      expect(child.pageCacheMisses).toEqual(0)
+      expect(child.rows).toEqual(1)
+      expect(child.time).toEqual(0)
+      expect(child.arguments).toEqual({
+        "Details": "$autoint_0 AS `1`",
+        "PipelineInfo": "Fused in Pipeline 0",
+        "Time": int(0),
+        "Id": int(1),
+        "PageCacheMisses": int(0),
+        "EstimatedRows": 1.0,
+        "DbHits": int(0),
+        "Rows": int(1),
+        "PageCacheHits": int(0)
+      })
+
+      expect(child.children.length).toEqual(0)
     }
   })
 
