@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 import config from './config'
-import neo4j, { Date, DateTime, Duration, LocalDateTime, LocalTime, Point, Time, Wrapper, int } from '../../src'
+import neo4j, { Date, DateTime, Duration, LocalDateTime, LocalTime, Plan, Point, Time, Wrapper, WrapperSession, WrapperSessionConfig, int } from '../../src'
 
 const NESTED_OBJECT = { 
   a: { 
@@ -84,6 +84,9 @@ describe('minimum requirement', () => {
   })
 
   afterEach(async () => {
+    for await (const session of withSession({ database: config.database })) {
+      await session.run('MATCH (n) DETACH DELETE n')
+    }
     await wrapper?.close()
   })
 
@@ -163,13 +166,10 @@ describe('minimum requirement', () => {
     ['list of objects', v(LIST_OF_OBJECTS)],
     ['object of lists', v(OBJECT_OF_LISTS)]
   ])('should be able to echo "%s" (%s)', async (_, [input, expectedOutput]) => {
-    const session = wrapper.session({ database: config.database })
-    try {
+    for await (const session of withSession({ database: config.database })) {
       const { records: [first] } = await session.run('RETURN $input as output',  { input })
       expect(first.get('output')).toEqual(expectedOutput) 
-    } finally {
-      await session.close()
-    }
+    } 
   })
 
   it.each([
@@ -178,14 +178,105 @@ describe('minimum requirement', () => {
     ['WGS Point 2D', 'point({longitude: 12.78, latitude: 56.7})', new Point(int(4326), 12.78, 56.7)],
     ['WGS Point 3D', 'point({longitude: 12.78, latitude: 56.7, height: 120.57})', new Point(int(4979), 12.78, 56.7, 120.57)]
   ])('should be able to echo "%s" (%s)', async (_, statement, expectedOutput) => {
-    const session = wrapper.session({ database: config.database })
-    try {
+    for await (const session of withSession({ database: config.database })) {
       const { records: [first] } = await session.run(`RETURN ${statement} as output`)
       expect(first.get('output')).toEqual(expectedOutput) 
+    }
+  })
+
+  it('should be able to return ResultSummary.counters', async () => {
+    for await (const session of withSession({ database: config.database })) {
+      const { summary: { counters} } = await session.run(
+        'CREATE (n: Person { name: "This person"})-[:WORKS_WITH]->(:Person { name: "Other person" }) ' +
+        'RETURN n')
+
+      expect(counters.containsUpdates()).toEqual(true)
+      expect(counters.containsSystemUpdates()).toEqual(false)
+      expect(counters.updates()).toEqual({
+        nodesCreated: 2,
+        nodesDeleted: 0,
+        relationshipsCreated: 1,
+        relationshipsDeleted: 0,
+        propertiesSet: 2,
+        labelsAdded: 2,
+        labelsRemoved: 0,
+        indexesAdded: 0,
+        indexesRemoved: 0,
+        constraintsAdded: 0,
+        constraintsRemoved: 0
+      })
+      expect(counters.systemUpdates()).toEqual(0)
+    }
+  })
+
+  it('should be able to return ResultSummary.plan', async () => {
+    for await (const session of withSession({ database: config.database })) {
+      const { summary} = await session.run('PROFILE RETURN 1')
+
+      expect(summary.plan).not.toBe(false)
+      
+      const plan: Plan = summary.plan as Plan
+      expect(plan.identifiers).toEqual(['`1`'])
+      expect(plan.operatorType).toEqual('ProduceResults@neo4j')
+      expect(plan.arguments).toEqual({
+        "GlobalMemory": int(312),
+        "planner-impl": "IDP",
+        "Memory": int(0),
+        "string-representation": "Planner COST\n\nRuntime PIPELINED\n\nRuntime version 5.21\n\nBatch size 128\n\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n| Operator        | Id | Details           | Estimated Rows | Rows | DB Hits | Memory (Bytes) | Page Cache Hits/Misses | Time (ms) | Pipeline            |\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n| +ProduceResults |  0 | `1`               |              1 |    1 |       0 |              0 |                        |           |                     |\n| |               +----+-------------------+----------------+------+---------+----------------+                        |           |                     |\n| +Projection     |  1 | $autoint_0 AS `1` |              1 |    1 |       0 |                |                    0/0 |     0.000 | Fused in Pipeline 0 |\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n\nTotal database accesses: 0, total allocated memory: 312\n",
+        "runtime": "PIPELINED",
+        "runtime-impl": "PIPELINED",
+        "DbHits": int(0),
+        "batch-size": int(128),
+        "Details": "`1`",
+        "planner-version": "5.21",
+        "PipelineInfo": "Fused in Pipeline 0",
+        "runtime-version": "5.21",
+        "Id": int(0),
+        "EstimatedRows": 1.0,
+        "planner": "COST",
+        "Rows": int(1)
+      })
+
+      expect(plan.children.length).toBe(1)
+      
+      const [child] = plan.children
+      expect(child.identifiers).toEqual(['`1`'])
+      expect(child.operatorType).toEqual('Projection@neo4j')
+      expect(child.arguments).toEqual({
+        "Details": "$autoint_0 AS `1`",
+        "PipelineInfo": "Fused in Pipeline 0",
+        "Time": int(0),
+        "Id": int(1),
+        "PageCacheMisses": int(0),
+        "EstimatedRows": 1.0,
+        "DbHits": int(0),
+        "Rows": int(1),
+        "PageCacheHits": int(0)
+      })
+
+      expect(child.children.length).toBe(0)
+    }
+  })
+
+  /**
+   * Emulates a try-with-resource by using iterators
+   * 
+   * @example
+   * for await (const session of withSession({ database: 'neo4j })) {
+   *    // work with my session
+   * }
+   * // session is closed
+   * 
+   * @param config The session config
+   */
+  async function* withSession (config: WrapperSessionConfig): AsyncGenerator<WrapperSession> {
+    const session = wrapper.session(config)
+    try {
+      yield session
     } finally {
       await session.close()
     }
-  })
+  }
 
   function v<T, K = T>(value: T, mapper: (value: T)=> K = (v) => v as unknown as K): [T, K] {
     return [value, mapper(value)]

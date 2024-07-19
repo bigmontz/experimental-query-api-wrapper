@@ -82,7 +82,7 @@ type ProfiledQueryPlan = {
     pageCacheHitRatio: number
     time: number
     operatorType: string
-    arguments: Record<string, unknown>
+    arguments: Record<string, RawQueryValue>
     identifiers: string[]
     children: ProfiledQueryPlan[]
 }
@@ -178,6 +178,8 @@ export class QueryResponseCodec {
                                 break
                             case 'arguments':
                                 actualKey = 'args'
+                                actualValue = Object.fromEntries(Object.entries(value as {})
+                                    .map(([k, v]) => [k, this._decodeValue(v as RawQueryValue)]))
                                 break
                             case 'records':
                                 actualKey = 'row'
