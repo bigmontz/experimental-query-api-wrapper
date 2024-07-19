@@ -319,6 +319,24 @@ describe('minimum requirement', () => {
     }
   })
 
+  it('should be able to receive bookmarks', async () => {
+    for await (const session of withSession({ database: config.database })) {
+      expect(session.lastBookmarks()).toEqual([])
+
+      await session.run('RETURN 1')
+
+      expect(session.lastBookmarks()).toHaveLength(1)
+      expect(typeof session.lastBookmarks()[0]).toBe('string')
+      const [previousBookmark] = session.lastBookmarks()
+
+      await session.run('CREATE (n:Person { name: $name }) RETURN n', { name: 'My Mom'})
+
+      expect(session.lastBookmarks()).toHaveLength(1)
+      expect(typeof session.lastBookmarks()[0]).toBe('string')
+      expect(session.lastBookmarks()[0]).not.toEqual(previousBookmark)
+    }
+  })
+
   /**
    * Emulates a try-with-resource by using iterators
    * 
