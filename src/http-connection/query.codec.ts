@@ -23,7 +23,7 @@ type RawQueryValueTypes = 'Null' | 'Boolean' | 'Integer' | 'Float' | 'String' |
     'Duration' | 'Point' | 'Base64' | 'Map' | 'List' | 'Node' | 'Relationship' |
     'Path'
 
-type PointShape = { srid: number, x: string, y: string, z?: string }
+type PointShape = { coordinates: [number, number, number?], crs: { srid: number } }
 type NodeShape = { _element_id: string, _labels: string[], _properties?:  Record<string, RawQueryValue>}
 type RelationshipShape = { _element_id: string, _start_node_element_id: string, _end_node_element_id: string, _type: string,  _properties?:  Record<string, RawQueryValue>  }
 type PathShape = (RawQueryRelationship | RawQueryNode)[]
@@ -426,10 +426,8 @@ export class QueryResponseCodec {
 
     _decodePoint(value: PointShape): Point<Integer | bigint | number> {
         return new Point(
-            this._normalizeInteger(int(value.srid)),
-            this._decodeFloat(value.x),
-            this._decodeFloat(value.y),
-            value.z != null ? this._decodeFloat(value.z) : undefined
+            this._normalizeInteger(int(value.crs.srid)),
+            ...value.coordinates
         )
     }
 
@@ -577,10 +575,14 @@ export class QueryRequestCodec {
             return this._encodeValue(Array.from(value)) 
         } else if (isPoint(value)) {
             return { $type: 'Point', _value: {
-                srid: int(value.srid).toNumber(),
-                x: value.x.toString(),
-                y: value.y.toString(),
-                z: value.z?.toString()
+                crs: {
+                    srid: int(value.srid).toNumber(),
+                },
+                coordinates: [
+                    value.x,
+                    value.y,
+                    value.z
+                ].filter(v => v != null) as [number, number, number?]
             }}
         } else if (isDuration(value)) {
             return { $type: 'Duration', _value: value.toString()}
