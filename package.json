@@ -12,7 +12,7 @@
     "test": "yarn test::unit && yarn test::integration",
     "test::watch": "jest --watch",
     "test::unit": "jest --passWithNoTests",
-    "test::integration": "jest -c jest.integration.config.ts --passWithNoTests",
+    "test::integration": "jest --passWithNoTests -c jest.integration.config.ts",
     "prepare": "npm run build",
     "clean": "rm -fr node_modules lib types"
   },
