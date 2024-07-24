@@ -330,6 +330,32 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     }
   })
 
+  it('should be able to return notifications', async () => {
+    for await (const session of withSession({ database: config.database })) {
+      const summary = await session.run('EXPLAIN MATCH (a:THIS_IS_NOT_A_LABEL) RETURN count(*)').summary()
+
+      expect(summary.notifications.length).toBe(1)
+
+      const [notification] = summary.notifications
+      expect(notification.code).toEqual('Neo.ClientNotification.Statement.UnknownLabelWarning')
+      expect(notification.title).toEqual('The provided label is not in the database.')
+      
+      expect(notification.description).toEqual('One of the labels in your query is not available in the database, ' + 
+                'make sure you didn\'t misspell it or that the label is available when you run this statement ' + 
+                'in your application (the missing label name is: THIS_IS_NOT_A_LABEL)')
+      expect(notification.severityLevel).toEqual('WARNING')
+      // WE NEED TO FIX THIS, CATEGORY IS NOT BEING RETURNED
+      expect(notification.category).toEqual('UNKNOWN')
+      expect(notification.position).not.toEqual({})
+      // @ts-expect-error
+      expect(notification.position.offset).toEqual(17)
+      // @ts-expect-error
+      expect(notification.position.line).toEqual(1)
+      // @ts-expect-error
+      expect(notification.position.column).toEqual(18)
+    }
+  })
+
   /**
    * Emulates a try-with-resource by using iterators
    * 

@@ -116,17 +116,17 @@ export default class HttpConnection extends Connection {
                         continue
                     }
 
-                    let iterate = true
-                    for (let i = 0; iterate && !observer.paused && i < batchSize; i++) {
+                    for (let i = 0; !observer.paused && i < batchSize && !observer.completed; i++) {
                         const { done, value: rawRecord } = stream.next()
                         if (!done) {
                             observer.onNext(rawRecord)
                         } else {
-                            iterate = false
-                            observer.onCompleted(codec.meta)
+                            observer.markCompleted()
                         }
                     }
                 }
+
+                observer.onCompleted(codec.meta)
             })
             .catch(error => observer.onError(error))
             .finally(() => {
