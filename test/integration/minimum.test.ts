@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 import config from './config'
-import neo4j, { Date, DateTime, Duration, LocalDateTime, LocalTime, Plan, Point, ProfiledPlan, Time, Wrapper, WrapperSession, WrapperSessionConfig, int } from '../../src'
+import neo4j, { Date, DateTime, Duration, LocalDateTime, LocalTime, Neo4jError, Plan, Point, ProfiledPlan, Time, Wrapper, WrapperSession, WrapperSessionConfig, int } from '../../src'
 import { when } from './jest.utils'
 
 const NESTED_OBJECT = { 
@@ -353,6 +353,17 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
       expect(notification.position.line).toEqual(1)
       // @ts-expect-error
       expect(notification.position.column).toEqual(18)
+    }
+  })
+
+  it('should be able to set access mode', async () => {
+    for await (const session of withSession({ database: config.database, defaultAccessMode: 'READ' })) {
+      const error = await session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).summary().catch(e => e)
+      
+      expect(error).toBeInstanceOf(Neo4jError)
+      expect(error.code).toEqual('Neo.ClientError.Statement.AccessMode')
+      expect(typeof error.message).toEqual('string')
+      expect(error.message.trim()).not.toEqual('')
     }
   })
 
