@@ -36,6 +36,10 @@ export default class HttpConnectionProvider extends ConnectionProvider {
     private _scheme: HttpScheme
     private _authTokenManager: AuthTokenManager
     private _config: types.InternalConfig
+    private _queryEndpoint?: string
+    private _discoveryPromise?: Promise<{
+        query: string
+    }>
 
 
     constructor(config: HttpConnectionProviderConfig) {
@@ -49,14 +53,28 @@ export default class HttpConnectionProvider extends ConnectionProvider {
     }
 
     async acquireConnection(param?: { accessMode?: string | undefined; database?: string | undefined; bookmarks: internal.bookmarks.Bookmarks; impersonatedUser?: string | undefined; onDatabaseNameResolved?: ((databaseName?: string | undefined) => void) | undefined; auth?: types.AuthToken | undefined } | undefined): Promise<Connection & Releasable> {
+        if (this._queryEndpoint == null) {
+            if (this._discoveryPromise == null) {
+                this._discoveryPromise = HttpConnection.discover({ address: this._address, scheme: this._scheme })
+            }
+
+            const discoveryResult = await this._discoveryPromise
+            this._queryEndpoint = discoveryResult.query
+        }
+        
         const auth = param?.auth ?? await this._authTokenManager.getToken()
         
-        return new HttpConnection({ release: async () => {}, auth, address: this._address, database: (param?.database ?? 'neo4j'), scheme: this._scheme, config: this._config, logger: this._log }) 
+        return new HttpConnection({ release: async () => {}, auth, address: this._address, database: (param?.database ?? 'neo4j'), queryEndpoint: this._queryEndpoint, config: this._config, logger: this._log }) 
     }
 
 
     async verifyConnectivityAndGetServerInfo(param?: { database?: string | undefined; accessMode?: string | undefined } | undefined): Promise<ServerInfo> {
-        return new ServerInfo({}, 5.0)
+        const discoveryInfo = await HttpConnection.discover({ scheme: this._scheme, address: this._address })
+        
+        return new ServerInfo({
+            address: this._address,
+            version: discoveryInfo.version
+        }, parseFloat(discoveryInfo.version))
     }
     
     async close(): Promise<void> {

@@ -27,7 +27,7 @@ let currentId = 0
 export interface HttpConnectionConfig {
     release: () => Promise<void>
     auth: types.AuthToken
-    scheme: HttpScheme
+    queryEndpoint: string
     address: internal.serverAddress.ServerAddress
     database: string
     config: types.InternalConfig
@@ -38,7 +38,7 @@ export interface HttpConnectionConfig {
 export default class HttpConnection extends Connection {
     private _release: () => Promise<void>
     private _auth: types.AuthToken
-    private _scheme: HttpScheme
+    private _queryEndpoint: string
     private _address: internal.serverAddress.ServerAddress
     private _database: string
     private _config: types.InternalConfig
@@ -51,8 +51,7 @@ export default class HttpConnection extends Connection {
         this._id = currentId++
         this._release = config.release
         this._auth = config.auth
-        this._scheme = config.scheme
-        this._address = config.address
+        this._queryEndpoint = config.queryEndpoint
         this._database = config.database
         this._config = config.config
         this._log = config.logger
@@ -137,8 +136,30 @@ export default class HttpConnection extends Connection {
     }
 
     private _getTransactionApi():string {
-        const address = `${this._scheme}://${this._address.asHostPort()}/db/${this._database === '' ? 'neo4j' : this._database}/query/v2`
-        return address
+        return this._queryEndpoint.replace('{databaseName}', this._database)
+    }
+
+    static async discover ({ scheme, address }: { scheme: HttpScheme, address: internal.serverAddress.ServerAddress }): Promise<{
+        query: string
+        version: string
+        edition: string
+    }> {
+        return await fetch(`${scheme}://${address.asHostPort()}`, {
+            headers: {
+                Accept: 'application/json',
+            } 
+        })
+            .then(async (res) => (await res.json()) as Record<string, string>)
+            .then(json => {
+                if (typeof json.query !== 'string') {
+                    throw new Error('Query API is not available')
+
+                }
+                return { query: json.query, version: json.neo4j_version, edition: json.neo4j_edition }
+            })  
+            .catch(e => { 
+                throw newError(`Failure discovering endpoints. Caused by: ${e.message}`, 'SERVICE_UNAVAILABLE', e)
+            })
     }
 
     getProtocolVersion(): number {
