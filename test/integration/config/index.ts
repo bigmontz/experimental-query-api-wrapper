@@ -22,7 +22,7 @@ const username = env.TEST_NEO4J_USER ?? 'neo4j'
 const password = env.TEST_NEO4J_PASS ?? 'password'
 const hostname = env.TEST_NEO4J_HOST ?? 'localhost'
 const scheme = env.TEST_NEO4J_SCHEME ?? 'bolt'
-const version = env.TEST_NEO4J_VERSION ?? '5.21'
+const version = env.TEST_NEO4J_VERSION ?? '5.22'
 const httpPort = env.TEST_NEO4J_HTTP_PORT ?? 7474
 const boltPort = env.TEST_NEO4J_BOLT_PORT ?? 7687
 const edition = env.TEST_NEO4J_EDITION ?? 'enterprise'
@@ -64,5 +64,8 @@ export default {
   },
   async stopNeo4j () {
     await neo4jContainer.stop()
+  },
+  get version (): number {
+    return parseFloat(version)
   }
 }

@@ -22,6 +22,8 @@ import { QueryRequestCodec, QueryResponseCodec, RawQueryResponse } from "./query
 
 type HttpScheme = 'http' | 'https'
 
+let currentId = 0
+
 export interface HttpConnectionConfig {
     release: () => Promise<void>
     auth: types.AuthToken
@@ -29,6 +31,7 @@ export interface HttpConnectionConfig {
     address: internal.serverAddress.ServerAddress
     database: string
     config: types.InternalConfig
+    logger: internal.logger.Logger
 }
 
 
@@ -40,15 +43,19 @@ export default class HttpConnection extends Connection {
     private _database: string
     private _config: types.InternalConfig
     private _abortController?: AbortController
+    private _log?: internal.logger.Logger
+    private _id: number
 
     constructor(config: HttpConnectionConfig) {
         super()
+        this._id = currentId++
         this._release = config.release
         this._auth = config.auth
         this._scheme = config.scheme
         this._address = config.address
         this._database = config.database
         this._config = config.config
+        this._log = config.logger
     }
 
     run(query: string, parameters?: Record<string, unknown> | undefined, config?: RunQueryConfig | undefined): internal.observer.ResultStreamObserver {
@@ -68,7 +75,8 @@ export default class HttpConnection extends Connection {
 
         this._abortController =  new AbortController()
 
-        fetch(this._getTransactionApi(), {
+        const request: RequestInit & { url: string } = {
+            url: this._getTransactionApi(),
             method: 'POST',
             mode: 'cors',
             headers: {
@@ -78,7 +86,11 @@ export default class HttpConnection extends Connection {
             },
             signal: this._abortController.signal,
             body: JSON.stringify(requestCodec.body)
-        }).
+        }
+
+        this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
+
+        fetch(request.url, request).
             then(async (res) => {
                 return [res.headers.get('content-type'), (await res.json()) as RawQueryResponse]
             })
@@ -88,6 +100,7 @@ export default class HttpConnection extends Connection {
                     // is already dead
                     return
                 }
+                this._log?.debug(`${this} ${JSON.stringify(rawQueryResponse)}`)
                 const batchSize = config?.fetchSize ?? Number.MAX_SAFE_INTEGER
                 const codec = new QueryResponseCodec(this._config, contentType, rawQueryResponse);
 
@@ -146,5 +159,9 @@ export default class HttpConnection extends Connection {
 
     release(): Promise<void> {
         return this._release()
+    }
+
+    toString () {
+        return `HttpConnection [${this._id}]`
     }
 }
