@@ -39,7 +39,7 @@ export class WrapperImpl implements Wrapper {
     session (config: WrapperSessionConfig): WrapperSession {
         validateDatabase(config);
 
-        const session = this.driver.session()
+        const session = this.driver.session(config)
         return new WrapperSessionImpl(session)
     }
 }

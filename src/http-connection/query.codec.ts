@@ -563,6 +563,10 @@ export class QueryRequestCodec {
             this._body.impersonated_user = this._config?.impersonatedUser
         }
 
+        if (this._config?.mode) {
+            this._body.accessMode = this._config.mode.toUpperCase()
+        }
+
         return this._body
     }
 
