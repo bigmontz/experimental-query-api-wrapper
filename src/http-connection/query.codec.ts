@@ -86,6 +86,18 @@ type ProfiledQueryPlan = {
     children: ProfiledQueryPlan[]
 }
 
+type NotificationShape = {
+    code: string
+    title: string
+    description: string
+    position: {
+        offset: number
+        line: number
+        column: number
+    } | {}
+    severity: string
+    category: string
+}
 
 type RawQueryData = {
     fields: string[]
@@ -98,7 +110,7 @@ export type RawQueryResponse = {
     bookmarks: string[]
     profiledQueryPlan?: ProfiledQueryPlan
     errors?: []
-    notifications?: unknown[]
+    notifications?: NotificationShape[]
     [str: string]: unknown
 }
 
@@ -138,16 +150,12 @@ export class QueryResponseCodec {
     }
 
     get meta(): Record<string, unknown> {
-        // console.log('meta', this._rawQueryResponse.results[0].stats)
-        // const meta: Record<string, unknown> = { ...this._rawQueryResponse.results[0].stats, bookmark: this._rawQueryResponse.lastBookmarks }
-        // if (this._rawQueryResponse.notifications != null) {
-        //     meta.notifications = this._rawQueryResponse.notifications
-        // }
         return {
             bookmark: this._rawQueryResponse.bookmarks,
             stats: this._decodeStats(this._rawQueryResponse.counters),
             profile: this._rawQueryResponse.profiledQueryPlan != null ? 
-                this._decodeProfile(this._rawQueryResponse.profiledQueryPlan): null
+                this._decodeProfile(this._rawQueryResponse.profiledQueryPlan): null,
+            notifications: this._rawQueryResponse.notifications
         }
     }
 

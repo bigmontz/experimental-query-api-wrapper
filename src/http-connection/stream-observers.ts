@@ -72,8 +72,6 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
         this._paused = false
     }
 
-    
-
     prepareToHandleSingleResponse: () => void;
 
     markCompleted() {
