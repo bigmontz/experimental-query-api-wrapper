@@ -20,7 +20,7 @@ import { RunQueryConfig } from "neo4j-driver-core/types/connection"
 import { ResultStreamObserver } from "./stream-observers"
 import { QueryRequestCodec, QueryResponseCodec, RawQueryResponse } from "./query.codec"
 
-type HttpScheme = 'http' | 'https'
+export type HttpScheme = 'http' | 'https'
 
 let currentId = 0
 

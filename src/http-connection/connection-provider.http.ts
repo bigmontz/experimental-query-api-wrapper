@@ -15,9 +15,7 @@
  * limitations under the License.
  */
 import { ConnectionProvider, internal, AuthTokenManager, Connection, Releasable, types, ServerInfo } from "neo4j-driver-core"
-import HttpConnection from "./connection.http"
-
-type HttpScheme = 'http' | 'https'
+import HttpConnection, { HttpScheme } from "./connection.http"
 
 export interface HttpConnectionProviderConfig {
     id: number,
