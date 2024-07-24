@@ -17,6 +17,7 @@
  */
 import config from './config'
 import neo4j, { Date, DateTime, Duration, LocalDateTime, LocalTime, Plan, Point, ProfiledPlan, Time, Wrapper, WrapperSession, WrapperSessionConfig, int } from '../../src'
+import { when } from './jest.utils'
 
 const NESTED_OBJECT = { 
   a: { 
@@ -65,7 +66,7 @@ const OBJECT_OF_LISTS = {
   b: [1, 2]
 }
 
-describe('minimum requirement', () => {
+when(config.version >= 5.23, () => describe('minimum requirement', () => {
   let wrapper: Wrapper
 
   beforeAll(async () => {
@@ -146,12 +147,10 @@ describe('minimum requirement', () => {
     ['bytes', v(new Uint8Array([0x00, 0x33, 0x66, 0x99, 0xCC, 0xFF]))],
     
     // spatial types
-    // the following types is getting bad request
-    // need to double check format
-    // ['WGS Point 2D', v(new Point(int(4326), 1.2, 3.4))],
-    // ['CARTESIAN Point 2D', v(new Point(int(7203), 1.2, 3.4))],
-    // ['WGS Point 3D', v(new Point(int(4979), 1.2, 3.4, 5.6))],
-    // ['CARTESIAN Point 3D', v(new Point(int(9157), 1.2, 3.4, 5.6))],
+    ['WGS Point 2D', v(new Point(int(4326), 1.2, 3.4))],
+    ['CARTESIAN Point 2D', v(new Point(int(7203), 1.2, 3.4))],
+    ['WGS Point 3D', v(new Point(int(4979), 1.2, 3.4, 5.6))],
+    ['CARTESIAN Point 3D', v(new Point(int(9157), 1.2, 3.4, 5.6))],
 
     // Temporal Types
     ['Duration', v(new Duration(int(1), int(2), int(30), int(3000)))],
@@ -218,19 +217,16 @@ describe('minimum requirement', () => {
       const plan: Plan = summary.plan as Plan
       expect(plan.identifiers).toEqual(['`1`'])
       expect(plan.operatorType).toEqual('ProduceResults@neo4j')
-      expect(plan.arguments).toEqual({
+      expect(plan.arguments).toMatchObject({
         "GlobalMemory": int(312),
         "planner-impl": "IDP",
         "Memory": int(0),
-        "string-representation": "Planner COST\n\nRuntime PIPELINED\n\nRuntime version 5.21\n\nBatch size 128\n\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n| Operator        | Id | Details           | Estimated Rows | Rows | DB Hits | Memory (Bytes) | Page Cache Hits/Misses | Time (ms) | Pipeline            |\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n| +ProduceResults |  0 | `1`               |              1 |    1 |       0 |              0 |                        |           |                     |\n| |               +----+-------------------+----------------+------+---------+----------------+                        |           |                     |\n| +Projection     |  1 | $autoint_0 AS `1` |              1 |    1 |       0 |                |                    0/0 |     0.000 | Fused in Pipeline 0 |\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n\nTotal database accesses: 0, total allocated memory: 312\n",
         "runtime": "PIPELINED",
         "runtime-impl": "PIPELINED",
         "DbHits": int(0),
         "batch-size": int(128),
         "Details": "`1`",
-        "planner-version": "5.21",
         "PipelineInfo": "Fused in Pipeline 0",
-        "runtime-version": "5.21",
         "Id": int(0),
         "EstimatedRows": 1.0,
         "planner": "COST",
@@ -273,19 +269,16 @@ describe('minimum requirement', () => {
       expect(profile.pageCacheMisses).toEqual(0)
       expect(profile.rows).toEqual(1)
       expect(profile.time).toEqual(0)
-      expect(profile.arguments).toEqual({
+      expect(profile.arguments).toMatchObject({
         "GlobalMemory": int(312),
         "planner-impl": "IDP",
         "Memory": int(0),
-        "string-representation": "Planner COST\n\nRuntime PIPELINED\n\nRuntime version 5.21\n\nBatch size 128\n\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n| Operator        | Id | Details           | Estimated Rows | Rows | DB Hits | Memory (Bytes) | Page Cache Hits/Misses | Time (ms) | Pipeline            |\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n| +ProduceResults |  0 | `1`               |              1 |    1 |       0 |              0 |                        |           |                     |\n| |               +----+-------------------+----------------+------+---------+----------------+                        |           |                     |\n| +Projection     |  1 | $autoint_0 AS `1` |              1 |    1 |       0 |                |                    0/0 |     0.000 | Fused in Pipeline 0 |\n+-----------------+----+-------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n\nTotal database accesses: 0, total allocated memory: 312\n",
         "runtime": "PIPELINED",
         "runtime-impl": "PIPELINED",
         "DbHits": int(0),
         "batch-size": int(128),
         "Details": "`1`",
-        "planner-version": "5.21",
         "PipelineInfo": "Fused in Pipeline 0",
-        "runtime-version": "5.21",
         "Id": int(0),
         "EstimatedRows": 1.0,
         "planner": "COST",
@@ -349,6 +342,9 @@ describe('minimum requirement', () => {
    * @param config The session config
    */
   async function* withSession (config: WrapperSessionConfig): AsyncGenerator<WrapperSession> {
+    if (wrapper == null) {
+      throw new TypeError('Something wrong with test setup: no wrapper defined.')
+    }
     const session = wrapper.session(config)
     try {
       yield session
@@ -360,4 +356,4 @@ describe('minimum requirement', () => {
   function v<T, K = T>(value: T, mapper: (value: T)=> K = (v) => v as unknown as K): [T, K] {
     return [value, mapper(value)]
   }
-})
+}))

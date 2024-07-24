@@ -53,7 +53,7 @@ export default class Neo4jContainer {
     let container = new GenericContainer(new DockerImageName(undefined, 'neo4j', tag).toString())
       .withEnv('NEO4J_AUTH', `${this.user}/${this.password}`)
 
-    if (this.edition === 'enterprise') {
+    if (this.edition != null && this.edition.startsWith('enterprise')) {
       container = container.withEnv('NEO4J_ACCEPT_LICENSE_AGREEMENT', 'yes')
     }
 

@@ -51,13 +51,14 @@ export default class HttpConnectionProvider extends ConnectionProvider {
     async acquireConnection(param?: { accessMode?: string | undefined; database?: string | undefined; bookmarks: internal.bookmarks.Bookmarks; impersonatedUser?: string | undefined; onDatabaseNameResolved?: ((databaseName?: string | undefined) => void) | undefined; auth?: types.AuthToken | undefined } | undefined): Promise<Connection & Releasable> {
         const auth = param?.auth ?? await this._authTokenManager.getToken()
         
-        return new HttpConnection({ release: async () => {}, auth, address: this._address, database: (param?.database ?? 'neo4j'), scheme: this._scheme, config: this._config }) 
+        return new HttpConnection({ release: async () => {}, auth, address: this._address, database: (param?.database ?? 'neo4j'), scheme: this._scheme, config: this._config, logger: this._log }) 
     }
 
 
     async verifyConnectivityAndGetServerInfo(param?: { database?: string | undefined; accessMode?: string | undefined } | undefined): Promise<ServerInfo> {
         return new ServerInfo({}, 5.0)
     }
+    
     async close(): Promise<void> {
         
     }

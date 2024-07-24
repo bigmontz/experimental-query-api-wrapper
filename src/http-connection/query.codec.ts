@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { newError, Node, Relationship, int, error, types, Integer, Time, Date, LocalTime, Point, DateTime, LocalDateTime, Duration, isInt, isPoint, isDuration, isLocalTime, isTime, isDate, isLocalDateTime, isDateTime, isRelationship, isPath, isNode, isPathSegment, Path, PathSegment } from "neo4j-driver-core"
+import { newError, Node, Relationship, int, error, types, Integer, Time, Date, LocalTime, Point, DateTime, LocalDateTime, Duration, isInt, isPoint, isDuration, isLocalTime, isTime, isDate, isLocalDateTime, isDateTime, isRelationship, isPath, isNode, isPathSegment, Path, PathSegment, internal } from "neo4j-driver-core"
 import { RunQueryConfig } from "neo4j-driver-core/types/connection"
 
 type RawQueryValueTypes = 'Null' | 'Boolean' | 'Integer' | 'Float' | 'String' |
@@ -23,7 +23,6 @@ type RawQueryValueTypes = 'Null' | 'Boolean' | 'Integer' | 'Float' | 'String' |
     'Duration' | 'Point' | 'Base64' | 'Map' | 'List' | 'Node' | 'Relationship' |
     'Path'
 
-type PointShape = { coordinates: [number, number, number?], crs: { srid: number } }
 type NodeShape = { _element_id: string, _labels: string[], _properties?:  Record<string, RawQueryValue>}
 type RelationshipShape = { _element_id: string, _start_node_element_id: string, _end_node_element_id: string, _type: string,  _properties?:  Record<string, RawQueryValue>  }
 type PathShape = (RawQueryRelationship | RawQueryNode)[]
@@ -41,7 +40,7 @@ type RawQueryZonedDateTime = RawQueryValueDef<'ZonedDateTime', string>
 type RawQueryOffsetDateTime = RawQueryValueDef<'OffsetDateTime', string>
 type RawQueryLocalDateTime = RawQueryValueDef<'LocalDateTime', string>
 type RawQueryDuration = RawQueryValueDef<'Duration', string>
-type RawQueryPoint = RawQueryValueDef<'Point', PointShape>
+type RawQueryPoint = RawQueryValueDef<'Point', string>
 type RawQueryBinary = RawQueryValueDef<'Base64', string>
 interface RawQueryMap extends RawQueryValueDef<'Map', Record<string, RawQueryValue>> { }
 interface RawQueryList extends RawQueryValueDef<'List', RawQueryValue[]> { }
@@ -90,7 +89,7 @@ type ProfiledQueryPlan = {
 
 type RawQueryData = {
     fields: string[]
-    values: RawQueryValue[]
+    values: RawQueryValue[][]
 }
 
 export type RawQueryResponse = {
@@ -132,15 +131,8 @@ export class QueryResponseCodec {
     }
 
     *stream(): Generator<any[]> {
-        let rawRecord: unknown[] = []
         for (const value of this._rawQueryResponse.data.values) {
-            rawRecord.push(this._decodeValue(value))
-
-            if (rawRecord.length === this.keys.length) {
-                yield rawRecord
-                // erasing raw records
-                rawRecord = []
-            }
+            yield value.map(this._decodeValue.bind(this)) 
         }
         return
     }
@@ -220,7 +212,7 @@ export class QueryResponseCodec {
             case "Duration":
                 return this._decodeDuration(value._value as string)
             case "Point":
-                return this._decodePoint(value._value as PointShape)
+                return this._decodePoint(value._value as string)
             case "Base64":
                 return this._decodeBase64(value._value as string)
             case "Map":
@@ -426,10 +418,30 @@ export class QueryResponseCodec {
         return result
     }
 
-    _decodePoint(value: PointShape): Point<Integer | bigint | number> {
+    _decodePoint(value: string): Point<Integer | bigint | number> {
+        const createProtocolError = (): Point => internal.objectUtil.createBrokenObject(newError(
+            `Wrong point format. RawValue: ${value}`,
+            error.PROTOCOL_ERROR
+        ), new Point<Integer | bigint | number>(0, 0, 0))
+
+
+        const splittedOnSeparator = value.split(';')
+        if (splittedOnSeparator.length !== 2 || !splittedOnSeparator[0].startsWith('SRID=') || 
+            !(splittedOnSeparator[1].startsWith('POINT (') || splittedOnSeparator[1].startsWith('POINT Z ('))) {
+            return createProtocolError()
+        }
+
+        const [_, sridString] = splittedOnSeparator[0].split('=')
+        const srid = this._normalizeInteger(int(sridString))
+        
+        const [__, coordinatesString] = splittedOnSeparator[1].split('(')
+        const [x, y, z] = coordinatesString.substring(0, coordinatesString.length - 1).split(" ").filter(c => c != null).map(parseFloat)
+
         return new Point(
-            this._normalizeInteger(int(value.crs.srid)),
-            ...value.coordinates
+            srid,
+            x,
+            y,
+            z
         )
     }
 
@@ -576,16 +588,10 @@ export class QueryRequestCodec {
         } else if (isIterable(value)) {
             return this._encodeValue(Array.from(value)) 
         } else if (isPoint(value)) {
-            return { $type: 'Point', _value: {
-                crs: {
-                    srid: int(value.srid).toNumber(),
-                },
-                coordinates: [
-                    value.x,
-                    value.y,
-                    value.z
-                ].filter(v => v != null) as [number, number, number?]
-            }}
+            return { $type: 'Point', _value: value.z == null ?
+                `SRID=${int(value.srid).toString()};POINT (${value.x} ${value.y})`:
+                `SRID=${int(value.srid).toString()};POINT Z (${value.x} ${value.y} ${value.z})`
+            }
         } else if (isDuration(value)) {
             return { $type: 'Duration', _value: value.toString()}
         } else if (isLocalTime(value)) {
