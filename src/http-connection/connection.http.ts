@@ -29,9 +29,9 @@ export interface HttpConnectionConfig {
     auth: types.AuthToken
     queryEndpoint: string
     address: internal.serverAddress.ServerAddress
-    database: string
     config: types.InternalConfig
-    logger: internal.logger.Logger
+    logger: internal.logger.Logger,
+    errorHandler: (error: Error & { code: string, retriable: boolean }) => Error
 }
 
 
@@ -40,11 +40,11 @@ export default class HttpConnection extends Connection {
     private _auth: types.AuthToken
     private _queryEndpoint: string
     private _address: internal.serverAddress.ServerAddress
-    private _database: string
     private _config: types.InternalConfig
     private _abortController?: AbortController
     private _log?: internal.logger.Logger
     private _id: number
+    private _errorHandler: (error: Error & { code: string, retriable: boolean }) => Error
 
     constructor(config: HttpConnectionConfig) {
         super()
@@ -52,9 +52,9 @@ export default class HttpConnection extends Connection {
         this._release = config.release
         this._auth = config.auth
         this._queryEndpoint = config.queryEndpoint
-        this._database = config.database
         this._config = config.config
         this._log = config.logger
+        this._errorHandler = config.errorHandler
     }
 
     run(query: string, parameters?: Record<string, unknown> | undefined, config?: RunQueryConfig | undefined): internal.observer.ResultStreamObserver {
@@ -75,7 +75,7 @@ export default class HttpConnection extends Connection {
         this._abortController =  new AbortController()
 
         const request: RequestInit & { url: string } = {
-            url: this._getTransactionApi(),
+            url: this._getTransactionApi(config?.database!),
             method: 'POST',
             mode: 'cors',
             headers: {
@@ -93,6 +93,7 @@ export default class HttpConnection extends Connection {
             then(async (res) => {
                 return [res.headers.get('content-type'), (await res.json()) as RawQueryResponse]
             })
+            .catch(this._handleAndReThrown.bind(this))
             .catch((error) => observer.onError(error))
             .then(async ([contentType, rawQueryResponse]: [string, RawQueryResponse]) => {
                 if (rawQueryResponse == null) {
@@ -127,6 +128,7 @@ export default class HttpConnection extends Connection {
 
                 observer.onCompleted(codec.meta)
             })
+            .catch(this._handleAndReThrown.bind(this))
             .catch(error => observer.onError(error))
             .finally(() => {
                 this._abortController = undefined
@@ -135,8 +137,12 @@ export default class HttpConnection extends Connection {
         return observer
     }
 
-    private _getTransactionApi():string {
-        return this._queryEndpoint.replace('{databaseName}', this._database)
+    private _handleAndReThrown (error:  Error & { code: string, retriable: boolean }) {
+        throw this._errorHandler(error)
+    }
+
+    private _getTransactionApi(database: string):string {
+        return this._queryEndpoint.replace('{databaseName}', database)
     }
 
     static async discover ({ scheme, address }: { scheme: HttpScheme, address: internal.serverAddress.ServerAddress }): Promise<{

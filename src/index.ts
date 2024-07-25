@@ -138,7 +138,7 @@ function createAuthManager (authTokenOrProvider: AuthToken | AuthTokenManager): 
 
 function wrapper (
   url: HttpUrl | string,
-  authToken: AuthToken,
+  authToken: AuthToken | AuthTokenManager,
   config: Config = {}
 ): Wrapper {
   assertString(url, 'Http URL')

@@ -367,6 +367,32 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     }
   })
 
+  it('should be able to handle password rotation', async () => {
+    let password = config.password + 'wrong'
+    wrapper = neo4j.wrapper(`http://${config.hostname}:${config.httpPort}`,
+      neo4j.authTokenManagers.basic({ tokenProvider: async () => {
+          try {
+            return neo4j.auth.basic(config.username, password)
+          } finally {
+            password = config.password
+          }
+        }
+      })
+    )
+
+    for await (const session of withSession({ database: config.database })) {
+      const error = await session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).summary().catch(e => e)
+      
+      expect(error).toBeInstanceOf(Neo4jError)
+      expect(error.retriable).toEqual(true)
+      expect(error.code).toEqual('Neo.ClientError.Security.Unauthorized')
+      expect(typeof error.message).toEqual('string')
+      expect(error.message.trim()).not.toEqual('')
+
+      await session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).summary()
+    }
+  })
+
   /**
    * Emulates a try-with-resource by using iterators
    * 

@@ -134,7 +134,7 @@ export class QueryResponseCodec {
             // @ts-expect-error
             this._rawQueryResponse.errors[0].message,
             // @ts-expect-error
-            this._rawQueryResponse.errors[0].error
+            this._rawQueryResponse.errors[0].error ?? this._rawQueryResponse.errors[0].code
         )
     }
 
