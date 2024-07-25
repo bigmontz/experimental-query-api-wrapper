@@ -537,6 +537,9 @@ export class QueryRequestCodec {
     }
 
     get authorization (): string {
+        if (this._auth.scheme === 'bearer') {
+            return `Bearer ${btoa(this._auth.credentials)}`
+        }
         return `Basic ${btoa(`${this._auth.principal}:${this._auth.credentials}`)}`
     }
 

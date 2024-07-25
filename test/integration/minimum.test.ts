@@ -17,7 +17,7 @@
  */
 import config from './config'
 import neo4j, { Date, DateTime, Duration, LocalDateTime, LocalTime, Neo4jError, Plan, Point, ProfiledPlan, Time, Wrapper, WrapperSession, WrapperSessionConfig, int } from '../../src'
-import { when } from './jest.utils'
+import { when, withSession as _withSession } from './test.utils'
 
 const NESTED_OBJECT = { 
   a: { 
@@ -393,27 +393,38 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     }
   })
 
-  /**
-   * Emulates a try-with-resource by using iterators
-   * 
-   * @example
-   * for await (const session of withSession({ database: 'neo4j })) {
-   *    // work with my session
-   * }
-   * // session is closed
-   * 
-   * @param config The session config
-   */
-  async function* withSession (config: WrapperSessionConfig): AsyncGenerator<WrapperSession> {
+  it('should be able to handle password rotation', async () => {
+    let password = config.password + 'wrong'
+    wrapper = neo4j.wrapper(`http://${config.hostname}:${config.httpPort}`,
+      neo4j.authTokenManagers.basic({ tokenProvider: async () => {
+          try {
+            return neo4j.auth.basic(config.username, password)
+          } finally {
+            password = config.password
+          }
+        }
+      })
+    )
+
+    for await (const session of withSession({ database: config.database })) {
+      const error = await session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).summary().catch(e => e)
+      
+      expect(error).toBeInstanceOf(Neo4jError)
+      expect(error.retriable).toEqual(true)
+      expect(error.code).toEqual('Neo.ClientError.Security.Unauthorized')
+      expect(typeof error.message).toEqual('string')
+      expect(error.message.trim()).not.toEqual('')
+
+      await session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).summary()
+    }
+  })
+
+  function withSession (sessionConfig: WrapperSessionConfig) {
     if (wrapper == null) {
       throw new TypeError('Something wrong with test setup: no wrapper defined.')
     }
-    const session = wrapper.session(config)
-    try {
-      yield session
-    } finally {
-      await session.close()
-    }
+    
+    return _withSession(wrapper, sessionConfig)
   }
 
   function v<T, K = T>(value: T, mapper: (value: T)=> K = (v) => v as unknown as K): [T, K] {

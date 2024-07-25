@@ -15,40 +15,23 @@
  * limitations under the License.
  */
 
-type NumberOrString = number | string
-export default class Neo4jContainer {
-  private usages: number = 0
-  private container: any | undefined = undefined
+import Container, { NumberOrString } from "./ container"
 
+
+export default class Neo4jContainer extends Container {
   constructor (
     private readonly user: string,
     private readonly password: string,
     private readonly version: string,
     private readonly edition: string | undefined,
-    private readonly disabled: boolean,
+    readonly disabled: boolean,
     private readonly containerLogs: boolean = false
-
   ) {
+    super(disabled)
   }
 
-  async start (): Promise<void> {
-    if (this.disabled) {
-      return
-    }
-    this.usages++
-    console.log('Starting container')
-    if (this.container != null) {
-      console.log('Container already started')
-      return
-    }
-
+  async onStartup (GenericContainer: any, DockerImageName: any, Wait: any): Promise<void> {
     const tag = this.edition != null ? `${this.version}-${this.edition}` : this.version
-
-    // Browser does not support testcontainers
-    // @ts-expect-error
-    const path = global.window != null ? './browser/testcontainer.wrapper' : './node/testcontainer.wrapper'
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { GenericContainer, DockerImageName, Wait } = require(path)
 
     let container = new GenericContainer(new DockerImageName(undefined, 'neo4j', tag).toString())
       .withEnv('NEO4J_AUTH', `${this.user}/${this.password}`)
@@ -81,18 +64,5 @@ export default class Neo4jContainer {
 
   getHttpPort (defaultPort: NumberOrString = 7474): NumberOrString {
     return this.getMappedPort(7474, defaultPort)
-  }
-
-  getMappedPort (port: number, defaultPort: NumberOrString): NumberOrString {
-    return this.container != null ? this.container.getMappedPort(port) : defaultPort
-  }
-
-  async stop (): Promise<void> {
-    this.usages--
-    if (this.usages <= 0) {
-      this.usages = 0
-      await this.container?.stop()
-      this.container = undefined
-    }
   }
 }
