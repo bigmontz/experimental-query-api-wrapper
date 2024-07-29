@@ -38,6 +38,7 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
     private _beforeError?: (error: Error) => void;
     private _afterComplete?: (metadata: unknown) => void;
     private _server: internal.serverAddress.ServerAddress
+    private _haveRecordStreamed: boolean
 
     constructor(config: ResultStreamObserverConfig) {
         this._paused = false
@@ -48,6 +49,7 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
         this._beforeError = config.beforeError
         this._afterComplete = config.afterComplete
         this._server = config.server
+        this._haveRecordStreamed = false
 
         this._resultObservers = []
     }
@@ -110,6 +112,7 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
     }
 
     onNext(rawRecord: any[]): void {
+        this._haveRecordStreamed = true
         const record = new Record(this._keys, rawRecord)
         const observingOnNext = this._resultObservers.filter(o => o.onNext)
         if (observingOnNext.length > 0) {
@@ -148,8 +151,14 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
     onCompleted(meta: any): void {
         const completionMetadata = Object.assign(
             this._server ? { server: this._server } : {},
-            //this._meta,
-            meta
+            meta,
+            {
+                stream_summary: {
+                  have_records_streamed: this._haveRecordStreamed,
+                  pulled: true,
+                  has_keys: this._keys.length > 0
+                }
+            }
         )
         this._metadata = completionMetadata
         this.markCompleted()
