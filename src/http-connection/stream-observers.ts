@@ -16,6 +16,7 @@
  */
 
 import { Record, ResultObserver, internal } from "neo4j-driver-core"
+import { FSM, FSMTransition } from "./fsm";
 
 export interface ResultStreamObserverConfig {
     highRecordWatermark: number,
@@ -24,6 +25,9 @@ export interface ResultStreamObserverConfig {
     afterComplete?: (metadata: unknown) => void;
     server: internal.serverAddress.ServerAddress
 }
+
+type Events = 'keys' | 'next' | 'error' | 'completed'
+type States = 'READY' | 'STREAMING' | 'SUCCEEDED' | 'FAILED'
 
 export class ResultStreamObserver implements internal.observer.ResultStreamObserver {
     private _paused: boolean
@@ -39,6 +43,8 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
     private _afterComplete?: (metadata: unknown) => void;
     private _server: internal.serverAddress.ServerAddress
     private _haveRecordStreamed: boolean
+    private readonly _fsm: FSM<States, Events>
+
 
     constructor(config: ResultStreamObserverConfig) {
         this._paused = false
@@ -50,6 +56,7 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
         this._afterComplete = config.afterComplete
         this._server = config.server
         this._haveRecordStreamed = false
+        this._fsm = newFSM(this)
 
         this._resultObservers = []
     }
@@ -58,7 +65,7 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
         return this._completed
     }
 
-    get paused () {
+    get paused() {
         return this._paused
     }
 
@@ -74,10 +81,14 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
         this._paused = false
     }
 
-    prepareToHandleSingleResponse: () => void;
+    prepareToHandleSingleResponse() {
+        this.onKeys([])
+    }
 
     markCompleted() {
         this._completed = true
+        this.onKeys([])
+        this.onCompleted(false)
     }
 
     subscribe(observer: ResultObserver) {
@@ -103,15 +114,24 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
 
         // start stream
     }
+
     onKeys(keys: any[]): void {
+        this._fsm.onEvent('keys', keys)
+    }
+
+    _onKeys(keys: any[]): void {
         this._keys = keys
-        const observingOnKeys = this._resultObservers.filter(o => o.onNext)
+        const observingOnKeys = this._resultObservers.filter(o => o.onKeys)
         if (observingOnKeys.length > 0) {
             observingOnKeys.forEach(o => o.onKeys!(this._keys))
         }
     }
 
     onNext(rawRecord: any[]): void {
+        this._fsm.onEvent('next', rawRecord)
+    }
+
+    _onNext(rawRecord: any[]): void {
         this._haveRecordStreamed = true
         const record = new Record(this._keys, rawRecord)
         const observingOnNext = this._resultObservers.filter(o => o.onNext)
@@ -124,7 +144,12 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
             }
         }
     }
+
     onError(error: Error) {
+        this._fsm.onEvent('error', error)
+    }
+
+    _onError(error: Error) {
         this._error = error
 
         let beforeHandlerResult = null
@@ -148,20 +173,29 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
         }
     }
 
+    /**
+     * 
+     * @param {any|false} meta The metadata returned from server. Or false,
+     * if observer should complete with {}
+     */
     onCompleted(meta: any): void {
-        const completionMetadata = Object.assign(
+        this._fsm.onEvent('completed', meta)
+    }
+
+    _onCompleted(meta: any): void {
+        const completionMetadata = meta !== false ? Object.assign(
             this._server ? { server: this._server } : {},
             meta,
             {
                 stream_summary: {
-                  have_records_streamed: this._haveRecordStreamed,
-                  pulled: true,
-                  has_keys: this._keys.length > 0
+                    have_records_streamed: this._haveRecordStreamed,
+                    pulled: true,
+                    has_keys: this._keys.length > 0
                 }
             }
-        )
+        ) : {}
         this._metadata = completionMetadata
-        this.markCompleted()
+        this._completed = true
         const observingOnCompleted = this._resultObservers.filter(o => o.onCompleted)
         if (observingOnCompleted.length > 0) {
             observingOnCompleted.forEach(o => o.onCompleted!(this._metadata))
@@ -173,3 +207,81 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
 
     }
 }
+
+function newFSM(observer: ResultStreamObserver): FSM<States, Events> {
+    const onInvalidTransition = (_: unknown): FSMTransition<States> => {
+        const result = observer._onError(new Error('Invalid event'))
+        return {
+            nextState: 'FAILED',
+            result
+        }
+    }
+
+    const onFailure = (error: Error): FSMTransition<States> => {
+        const result = observer._onError(error)
+        return {
+            nextState: 'FAILED',
+            result
+        }
+    }
+
+    const ignore = () => ({})
+
+    return new FSM<States, Events>(
+        {
+            name: 'READY',
+            events: {
+                keys: (keys: string[]) => {
+                    const result = observer._onKeys(keys)
+                    return {
+                        nextState: 'STREAMING',
+                        result
+                    }
+                },
+                completed: onInvalidTransition,
+                next: onInvalidTransition,
+                error: onFailure
+            }
+        },
+        {
+            name: 'STREAMING',
+            events: {
+                keys: onInvalidTransition,
+                completed: (metadata: any) => {
+                    const result = observer._onCompleted(metadata)
+                    return {
+                        nextState: 'SUCCEEDED',
+                        result
+                    }
+                },
+                next: (rawRecord: any[]) => {
+                    const result = observer._onNext(rawRecord)
+                    return {
+                        result
+                    }
+                },
+                error: onFailure
+            }
+        },
+        {
+            name: 'SUCCEEDED',
+            events: {
+                keys: ignore,
+                next: ignore,
+                completed: ignore,
+                error: ignore
+            }
+        },
+        {
+            name: 'FAILED',
+            events: {
+                keys: ignore,
+                next: ignore,
+                completed: ignore,
+                error: ignore
+            }
+        }
+    )
+}
+
+
