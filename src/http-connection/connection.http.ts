@@ -121,12 +121,13 @@ export default class HttpConnection extends Connection {
                         if (!done) {
                             observer.onNext(rawRecord)
                         } else {
-                            observer.markCompleted()
+                            observer.onCompleted(codec.meta)
                         }
                     }
                 }
 
                 observer.onCompleted(codec.meta)
+                
             })
             .catch(this._handleAndReThrown.bind(this))
             .catch(error => observer.onError(error))

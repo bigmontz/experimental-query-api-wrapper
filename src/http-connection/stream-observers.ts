@@ -87,7 +87,9 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
 
     markCompleted() {
         this._completed = true
-        this.onKeys([])
+        if (this._keys == null) {
+            this.onKeys([])
+        }
         this.onCompleted(false)
     }
 
@@ -209,8 +211,8 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
 }
 
 function newFSM(observer: ResultStreamObserver): FSM<States, Events> {
-    const onInvalidTransition = (_: unknown): FSMTransition<States> => {
-        const result = observer._onError(new Error('Invalid event'))
+    const onInvalidTransition = (state: States, event: Events) => (_: unknown): FSMTransition<States> => {
+        const result = observer._onError(new Error(`Invalid event. State: ${state}, Event: ${event}`))
         return {
             nextState: 'FAILED',
             result
@@ -238,15 +240,15 @@ function newFSM(observer: ResultStreamObserver): FSM<States, Events> {
                         result
                     }
                 },
-                completed: onInvalidTransition,
-                next: onInvalidTransition,
+                completed: onInvalidTransition('READY', 'completed'),
+                next: onInvalidTransition('READY', 'next'),
                 error: onFailure
             }
         },
         {
             name: 'STREAMING',
             events: {
-                keys: onInvalidTransition,
+                keys: onInvalidTransition('STREAMING', 'keys'),
                 completed: (metadata: any) => {
                     const result = observer._onCompleted(metadata)
                     return {
