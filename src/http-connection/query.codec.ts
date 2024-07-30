@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { newError, Node, Relationship, int, error, types, Integer, Time, Date, LocalTime, Point, DateTime, LocalDateTime, Duration, isInt, isPoint, isDuration, isLocalTime, isTime, isDate, isLocalDateTime, isDateTime, isRelationship, isPath, isNode, isPathSegment, Path, PathSegment, internal } from "neo4j-driver-core"
+import { newError, Node, Relationship, int, error, types, Integer, Time, Date, LocalTime, Point, DateTime, LocalDateTime, Duration, isInt, isPoint, isDuration, isLocalTime, isTime, isDate, isLocalDateTime, isDateTime, isRelationship, isPath, isNode, isPathSegment, Path, PathSegment, internal, isUnboundRelationship } from "neo4j-driver-core"
 import { RunQueryConfig } from "neo4j-driver-core/types/connection"
 
 type RawQueryValueTypes = 'Null' | 'Boolean' | 'Integer' | 'Float' | 'String' |
@@ -516,6 +516,8 @@ export class QueryResponseCodec {
     }
 }
 
+export type QueryRequestCodecConfig = Pick<RunQueryConfig, 'bookmarks' | 'txConfig' | 'mode' | 'impersonatedUser'>
+
 export class QueryRequestCodec {
     private _body?: Record<string, unknown>
 
@@ -523,7 +525,7 @@ export class QueryRequestCodec {
         private _auth: types.AuthToken,
         private _query: string,
         private _parameters?: Record<string, unknown> | undefined,
-        private _config?: RunQueryConfig | undefined
+        private _config?: QueryRequestCodecConfig | undefined
     ) {
 
     }
@@ -537,10 +539,14 @@ export class QueryRequestCodec {
     }
 
     get authorization (): string {
-        if (this._auth.scheme === 'bearer') {
-            return `Bearer ${btoa(this._auth.credentials)}`
-        }
-        return `Basic ${btoa(`${this._auth.principal}:${this._auth.credentials}`)}`
+        switch(this._auth.scheme) {
+            case 'bearer':
+                return `Bearer ${btoa(this._auth.credentials)}`
+            case 'basic':
+                return `Basic ${btoa(`${this._auth.principal}:${this._auth.credentials}`)}`
+            default:
+                throw new Error(`Authorization scheme "${this._auth.scheme}" is not supported.`)
+        }   
     }
 
     get body (): Record<string, unknown> {
@@ -550,20 +556,23 @@ export class QueryRequestCodec {
 
         this._body = {
             statement: this._query,
-            includeCounters: true,
-            bookmarks: this._config?.bookmarks?.values()
+            includeCounters: true
         }
 
-        if (Object.getOwnPropertyNames(this._parameters).length !== 0) {
+        if (this._parameters != null && Object.getOwnPropertyNames(this._parameters).length !== 0) {
             this._body.parameters = this._encodeParameters(this._parameters!)
         }
 
+        if (this._config?.bookmarks != null && !this._config.bookmarks.isEmpty()) {
+            this._body.bookmarks =  this._config?.bookmarks?.values()
+        }
+
         if (this._config?.txConfig.timeout != null) {
-            this._body.max_execution_time = this._config?.txConfig.timeout
+            this._body.maxExecutionTime = this._config?.txConfig.timeout.toInt()
         }
 
         if (this._config?.impersonatedUser != null) {
-            this._body.impersonated_user = this._config?.impersonatedUser
+            this._body.impersonatedUser = this._config?.impersonatedUser
         }
 
         if (this._config?.mode) {
@@ -622,7 +631,7 @@ export class QueryRequestCodec {
                 return { $type: 'ZonedDateTime', _value: value.toString()}
             }
             return { $type: 'OffsetDateTime', _value: value.toString()}
-        } else if (isRelationship(value) || isNode(value) || isPath(value) || isPathSegment(value) ) {
+        } else if (isRelationship(value) || isNode(value) || isPath(value) || isPathSegment(value) || isUnboundRelationship(value) ) {
             throw newError('Graph types can not be ingested to the server', error.PROTOCOL_ERROR)
         } else if (typeof value === 'object') {
             return { $type: "Map", _value: this._encodeParameters(value as Record<string, unknown>)}
