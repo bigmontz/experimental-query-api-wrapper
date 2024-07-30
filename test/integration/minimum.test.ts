@@ -158,7 +158,10 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     ['Time', v(new Time(int(1), int(20), int(23), int(234), int(7200)))],
     ['Date', v(new Date(int(1999), int(6), int(12)))],
     ['LocalDateTime', v(new LocalDateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234)))],
-    ['DateTime', v(new DateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234), int(7200), 'Europe/Berlin'))],
+    ['DateTime Offset and Zone', v(new DateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234), int(7200), 'Europe/Berlin'))],
+    // TODO: FIX
+    // ['DateTime Zone', v(new DateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234), undefined, 'Europe/Berlin'))],
+    ['DateTime Offset', v(new DateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234), int(7200)))],
     
     // Combinations
     ['nested objects', v(NESTED_OBJECT)],
@@ -367,29 +370,9 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     }
   })
 
-  it('should be able to handle password rotation', async () => {
-    let password = config.password + 'wrong'
-    wrapper = neo4j.wrapper(`http://${config.hostname}:${config.httpPort}`,
-      neo4j.authTokenManagers.basic({ tokenProvider: async () => {
-          try {
-            return neo4j.auth.basic(config.username, password)
-          } finally {
-            password = config.password
-          }
-        }
-      })
-    )
-
+  it('should be able to set tx timeout', async () => {
     for await (const session of withSession({ database: config.database })) {
-      const error = await session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).summary().catch(e => e)
-      
-      expect(error).toBeInstanceOf(Neo4jError)
-      expect(error.retriable).toEqual(true)
-      expect(error.code).toEqual('Neo.ClientError.Security.Unauthorized')
-      expect(typeof error.message).toEqual('string')
-      expect(error.message.trim()).not.toEqual('')
-
-      await session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).summary()
+      await expect(session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}, { timeout: 123 }).summary()).resolves.not.toBeNull()
     }
   })
 

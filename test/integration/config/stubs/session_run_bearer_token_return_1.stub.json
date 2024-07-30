@@ -18,7 +18,6 @@
                 "equalToJson": {
                     "statement": "RETURN 1",
                     "includeCounters": true,
-                    "bookmarks": [],
                     "accessMode": "WRITE"
                 }
             }
