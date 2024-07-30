@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 import Neo4jContainer from './neo4j.container'
+import WireMockContainer from './wiremock.container'
 
 const env = process.env
 
@@ -37,6 +38,7 @@ const database = 'neo4j'
 const cluster = env.TEST_NEO4J_IS_CLUSTER === '1'
 
 const neo4jContainer = new Neo4jContainer(username, password, version, edition, testcontainersDisabled, printContainerLogs)
+const wireMockContainer = new WireMockContainer(testcontainersDisabled, printContainerLogs)
 
 export default {
   username,
@@ -67,5 +69,21 @@ export default {
   },
   get version (): number {
     return parseFloat(version)
+  },
+  async startWireMock () {
+    await wireMockContainer.start()
+
+  },
+  async stopWireMock () {
+    await wireMockContainer.stop()
+  },
+  get wireMockPort (): string {
+    return wireMockContainer.getHttpPort().toString()
+  },
+  async loadWireMockStub (stubName: string): Promise<string | undefined> {
+    return await wireMockContainer.loadStubFile(`./stubs/${stubName}.stub.json`)
+  },
+  async deleteWireMockStub (stubId?: string): Promise<void> {
+    return await wireMockContainer.deleteStub(stubId)
   }
 }

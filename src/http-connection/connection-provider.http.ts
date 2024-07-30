@@ -62,7 +62,25 @@ export default class HttpConnectionProvider extends ConnectionProvider {
         
         const auth = param?.auth ?? await this._authTokenManager.getToken()
         
-        return new HttpConnection({ release: async () => {}, auth, address: this._address, database: (param?.database ?? 'neo4j'), queryEndpoint: this._queryEndpoint, config: this._config, logger: this._log }) 
+        return new HttpConnection({ 
+            release: async () => {}, 
+            auth, 
+            address: this._address,
+            queryEndpoint: this._queryEndpoint, 
+            config: this._config, 
+            logger: this._log,
+            errorHandler: (error: Error & { code: string, retriable: boolean }): Error => {
+                if (error == null || typeof error.code !== 'string' || !error.code.startsWith('Neo.ClientError.Security.') || param?.auth != null  ) {
+                    return error
+                }
+                const handled = this._authTokenManager.handleSecurityException(auth, error.code as unknown as `Neo.ClientError.Security.${string}`)
+                if (handled) {
+                    error.retriable = true
+                }
+
+                return error
+            }  
+        }) 
     }
 
 

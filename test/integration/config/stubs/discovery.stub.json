@@ -1,0 +1,25 @@
+{
+    "request": {
+        "method": "GET",
+        "url": "/"
+    },
+    "response": {
+        "status": 200,
+        "body": {
+            "bolt_routing": "neo4j://localhost:{boltPort}",
+            "query": "http://localhost:{httpPort}/db/{databaseName}/query/v2",
+            "dbms/cluster": "http://localhost:{httpPort}/dbms/cluster",
+            "db/cluster": "http://localhost:{httpPort}/db/{databaseName}/cluster",
+            "transaction": "http://localhost:{httpPort}/db/{databaseName}/tx",
+            "bolt_direct": "bolt://localhost:{boltPort}",
+            "neo4j_version": "5.23.0-5609",
+            "neo4j_edition": "enterprise",
+            "auth_config": {
+                "oidc_providers": []
+            }
+        },
+        "headers": {
+            "Content-Type": "application/json"
+        }
+    }
+}

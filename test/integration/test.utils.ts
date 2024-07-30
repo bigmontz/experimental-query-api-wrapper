@@ -16,6 +16,8 @@
  * limitations under the License.
  */
 
+import { Wrapper, WrapperSession, WrapperSessionConfig } from "../../src"
+
 export function when (canRun: (() => boolean )| boolean, fn: jest.EmptyFunction ) {
     if (canRun === true || typeof canRun === 'function' && canRun()) {
         fn()
@@ -27,3 +29,24 @@ export function when (canRun: (() => boolean )| boolean, fn: jest.EmptyFunction 
         })
     }
 }
+
+
+/**
+   * Emulates a try-with-resource by using iterators
+   * 
+   * @example
+   * for await (const session of withSession(wrapper, { database: 'neo4j })) {
+   *    // work with my session
+   * }
+   * // session is closed
+   * 
+   * @param config The session config
+   */
+export async function* withSession (wrapper: Wrapper, config: WrapperSessionConfig): AsyncGenerator<WrapperSession> {
+    const session = wrapper.session(config)
+    try {
+      yield session
+    } finally {
+      await session.close()
+    }
+  }
