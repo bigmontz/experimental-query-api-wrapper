@@ -19,5 +19,11 @@
 export function when (canRun: (() => boolean )| boolean, fn: jest.EmptyFunction ) {
     if (canRun === true || typeof canRun === 'function' && canRun()) {
         fn()
+    } else {
+        describe('skipped', () => {
+            it('should skip', () => {
+                expect(1).toBe(1)
+            })
+        })
     }
 }
