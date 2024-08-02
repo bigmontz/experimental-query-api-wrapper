@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { auth, types, internal, int, Date, Time, LocalTime, DateTime, LocalDateTime, Point, Duration, Node, Relationship, UnboundRelationship, Path, PathSegment, newError, Integer } from "neo4j-driver-core";
+import neo4j, { auth, types, internal, int, Date, Time, LocalTime, DateTime, LocalDateTime, Point, Duration, Node, Relationship, UnboundRelationship, Path, PathSegment } from "neo4j-driver-core";
 import { QueryRequestCodec, QueryRequestCodecConfig, QueryResponseCodec, RawQueryResponse, RawQueryValue } from "../../../src/http-connection/query.codec";
 
 describe('QueryRequestCodec', () => {
@@ -197,7 +197,6 @@ describe('QueryRequestCodec', () => {
             })
 
             expect(() => codec.body).toThrow('Graph types can not be ingested to the server')
-
         })
 
     })
@@ -1044,6 +1043,110 @@ describe('QueryResponseCodec', () => {
             const codec = subject(param)
 
             expect(() => codec.meta).toThrow(codec.error)
+        })
+    })
+
+    describe('.stream()', () => {
+        it.each([
+            ...[
+                ...useCustomIntegerConfigFixture().map(config => ({ toInt: int, config })),
+                ...useLossyIntegerConfigFixture().map(config => ({ toInt: (v: any) => int(v).toInt(), config })),
+                ...useBigIntConfigFixture().map(config => ({ toInt: (v: any) => int(v).toBigInt(), config })),
+            ].flatMap(({ toInt, config }) => [
+                ['Empty', [], [], config],
+                ['one line and one value', [[{ $type: 'String', _value: 'the string' }]], [['the string']], config],
+                ['multi line and one value', [
+                    [{ $type: 'Null', _value: null }],
+                    [{ $type: 'Boolean', _value: false }],
+                    [{ $type: 'Integer', _value: '123' }],
+                    [{ $type: 'Float', _value: '-1234' }],
+                    [{ $type: 'String', _value: 'Hello, Greg!' }],
+                    [{ $type: 'Base64', _value: 'YGCwFw==' }],
+                    [{ $type: 'List', _value: [{ $type: 'String', _value: 'A' }, { $type: 'Integer', _value: '12' }] }],
+                    [{ $type: 'Map', _value: { a: { $type: 'String', _value: 'b' }, c: { $type: 'List', _value: [{ $type: 'String', _value: 'd' }] } } }],
+                    [{ $type: 'Date', _value: '1988-08-23' }],
+                    [{ $type: 'Time', _value: '12:50:35.556000000+01:00' }],
+                    [{ $type: 'LocalTime', _value: '12:50:35.556000000' }],
+                    [{ $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' }],
+                    [{ $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' }],
+                    [{ $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' }],
+                    [{ $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' }],
+                    [{ $type: 'Duration', _value: 'P0M14DT16S' }]
+                ], [
+                        [null],
+                        [false],
+                        [toInt('123')],
+                        [-1234],
+                        ['Hello, Greg!'],
+                        [new Uint8Array([0x60, 0x60, 0xB0, 0x17])],
+                        [['A', toInt('12')]],
+                        [{ a: 'b', c: ['d'] }],
+                        [new Date(toInt(1988), toInt(8), toInt(23))],
+                        [new Time(toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600))],
+                        [new LocalTime(toInt(12), toInt(50), toInt(35), toInt(556000000))],
+                        [new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(-3600))],
+                        [new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll')],
+                        [new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600), 'Antarctica/Troll')],
+                        [new LocalDateTime(toInt(2001), toInt(5), toInt(3), toInt(13), toInt(45), toInt(0), toInt(3404004))],
+                        [new Duration(toInt(0), toInt(14), toInt(16), toInt(0))]
+                    ], config],
+                ['one line and multiple values', [
+                    [{ $type: 'Null', _value: null },
+                    { $type: 'Boolean', _value: false },
+                    { $type: 'Integer', _value: '123' },
+                    { $type: 'Float', _value: '-1234' },
+                    { $type: 'String', _value: 'Hello, Greg!' },
+                    { $type: 'Base64', _value: 'YGCwFw==' },
+                    { $type: 'List', _value: [{ $type: 'String', _value: 'A' }, { $type: 'Integer', _value: '12' }] },
+                    { $type: 'Map', _value: { a: { $type: 'String', _value: 'b' }, c: { $type: 'List', _value: [{ $type: 'String', _value: 'd' }] } } },
+                    { $type: 'Date', _value: '1988-08-23' },
+                    { $type: 'Time', _value: '12:50:35.556000000+01:00' },
+                    { $type: 'LocalTime', _value: '12:50:35.556000000' },
+                    { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
+                    { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                    { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
+                    { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
+                    { $type: 'Duration', _value: 'P0M14DT16S' }]
+                ], [
+                        [null,
+                            false,
+                            toInt('123'),
+                            -1234,
+                            'Hello, Greg!',
+                            new Uint8Array([0x60, 0x60, 0xB0, 0x17]),
+                            ['A', toInt('12')],
+                            { a: 'b', c: ['d'] },
+                            new Date(toInt(1988), toInt(8), toInt(23)),
+                            new Time(toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600)),
+                            new LocalTime(toInt(12), toInt(50), toInt(35), toInt(556000000)),
+                            new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(-3600)),
+                            new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll'),
+                            new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600), 'Antarctica/Troll'),
+                            new LocalDateTime(toInt(2001), toInt(5), toInt(3), toInt(13), toInt(45), toInt(0), toInt(3404004)),
+                            new Duration(toInt(0), toInt(14), toInt(16), toInt(0))]
+                    ], config],
+            ])
+        ])('should handle %s values', (_: string, values: any, expected: any, config?: Partial<types.InternalConfig>) => {
+            const codec = subject({
+                rawQueryResponse: {
+                    ...DEFAULT_RAW_RESPONSE,
+                    data: {
+                        ...DEFAULT_RAW_RESPONSE.data,
+                        values
+                    }
+                },
+                config
+            })
+
+            expect([...codec.stream()]).toEqual(expected)
+        })
+
+        it.each(
+            errorConditionsFixture()
+        )('should handle %s failures', (_: string, param: SubjectParams) => {
+            const codec = subject(param)
+
+            expect(() => codec.stream()).toThrow(codec.error)
         })
     })
 
