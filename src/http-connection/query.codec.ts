@@ -15,47 +15,48 @@
  * limitations under the License.
  */
 
-import { newError, Node, Relationship, int, error, types, Integer, Time, Date, LocalTime, Point, DateTime, LocalDateTime, Duration, isInt, isPoint, isDuration, isLocalTime, isTime, isDate, isLocalDateTime, isDateTime, isRelationship, isPath, isNode, isPathSegment, Path, PathSegment, internal, isUnboundRelationship } from "neo4j-driver-core"
+import { newError, Node, Relationship, int, error, types, Integer, Time, Date, LocalTime, Point, DateTime, LocalDateTime, Duration, isInt, isPoint, isDuration, isLocalTime, isTime, isDate, isLocalDateTime, isDateTime, isRelationship, isPath, isNode, isPathSegment, Path, PathSegment, internal, isUnboundRelationship, auth } from "neo4j-driver-core"
 import { RunQueryConfig } from "neo4j-driver-core/types/connection"
+import { config } from "yargs"
 
-type RawQueryValueTypes = 'Null' | 'Boolean' | 'Integer' | 'Float' | 'String' |
+export type RawQueryValueTypes = 'Null' | 'Boolean' | 'Integer' | 'Float' | 'String' |
     'Time' | 'Date' | 'LocalTime' | 'ZonedDateTime' | 'OffsetDateTime' | 'LocalDateTime' |
     'Duration' | 'Point' | 'Base64' | 'Map' | 'List' | 'Node' | 'Relationship' |
     'Path'
 
-type NodeShape = { _element_id: string, _labels: string[], _properties?:  Record<string, RawQueryValue>}
-type RelationshipShape = { _element_id: string, _start_node_element_id: string, _end_node_element_id: string, _type: string,  _properties?:  Record<string, RawQueryValue>  }
-type PathShape = (RawQueryRelationship | RawQueryNode)[]
-type RawQueryValueDef<T extends RawQueryValueTypes, V extends unknown> = { $type: T, _value: V }
+export type NodeShape = { _element_id: string, _labels: string[], _properties?: Record<string, RawQueryValue> }
+export type RelationshipShape = { _element_id: string, _start_node_element_id: string, _end_node_element_id: string, _type: string, _properties?: Record<string, RawQueryValue> }
+export type PathShape = (RawQueryRelationship | RawQueryNode)[]
+export type RawQueryValueDef<T extends RawQueryValueTypes, V extends unknown> = { $type: T, _value: V }
 
-type RawQueryNull = RawQueryValueDef<'Null', null>
-type RawQueryBoolean = RawQueryValueDef<'Boolean', boolean>
-type RawQueryInteger = RawQueryValueDef<'Integer', string>
-type RawQueryFloat = RawQueryValueDef<'Float', string>
-type RawQueryString = RawQueryValueDef<'String', string>
-type RawQueryTime = RawQueryValueDef<'Time', string>
-type RawQueryDate = RawQueryValueDef<'Date', string>
-type RawQueryLocalTime = RawQueryValueDef<'LocalTime', string>
-type RawQueryZonedDateTime = RawQueryValueDef<'ZonedDateTime', string>
-type RawQueryOffsetDateTime = RawQueryValueDef<'OffsetDateTime', string>
-type RawQueryLocalDateTime = RawQueryValueDef<'LocalDateTime', string>
-type RawQueryDuration = RawQueryValueDef<'Duration', string>
-type RawQueryPoint = RawQueryValueDef<'Point', string>
-type RawQueryBinary = RawQueryValueDef<'Base64', string>
-interface RawQueryMap extends RawQueryValueDef<'Map', Record<string, RawQueryValue>> { }
-interface RawQueryList extends RawQueryValueDef<'List', RawQueryValue[]> { }
-type RawQueryNode = RawQueryValueDef<'Node', NodeShape>
-type RawQueryRelationship = RawQueryValueDef<'Relationship', RelationshipShape>
-type RawQueryPath = RawQueryValueDef<'Path', PathShape>
+export type RawQueryNull = RawQueryValueDef<'Null', null>
+export type RawQueryBoolean = RawQueryValueDef<'Boolean', boolean>
+export type RawQueryInteger = RawQueryValueDef<'Integer', string>
+export type RawQueryFloat = RawQueryValueDef<'Float', string>
+export type RawQueryString = RawQueryValueDef<'String', string>
+export type RawQueryTime = RawQueryValueDef<'Time', string>
+export type RawQueryDate = RawQueryValueDef<'Date', string>
+export type RawQueryLocalTime = RawQueryValueDef<'LocalTime', string>
+export type RawQueryZonedDateTime = RawQueryValueDef<'ZonedDateTime', string>
+export type RawQueryOffsetDateTime = RawQueryValueDef<'OffsetDateTime', string>
+export type RawQueryLocalDateTime = RawQueryValueDef<'LocalDateTime', string>
+export type RawQueryDuration = RawQueryValueDef<'Duration', string>
+export type RawQueryPoint = RawQueryValueDef<'Point', string>
+export type RawQueryBinary = RawQueryValueDef<'Base64', string>
+export interface RawQueryMap extends RawQueryValueDef<'Map', Record<string, RawQueryValue>> { }
+export interface RawQueryList extends RawQueryValueDef<'List', RawQueryValue[]> { }
+export type RawQueryNode = RawQueryValueDef<'Node', NodeShape>
+export type RawQueryRelationship = RawQueryValueDef<'Relationship', RelationshipShape>
+export type RawQueryPath = RawQueryValueDef<'Path', PathShape>
 
 
-type RawQueryValue = RawQueryNull | RawQueryBoolean | RawQueryInteger | RawQueryFloat |
+export type RawQueryValue = RawQueryNull | RawQueryBoolean | RawQueryInteger | RawQueryFloat |
     RawQueryString | RawQueryTime | RawQueryDate | RawQueryLocalTime | RawQueryZonedDateTime |
     RawQueryOffsetDateTime | RawQueryLocalDateTime | RawQueryDuration | RawQueryPoint |
     RawQueryBinary | RawQueryMap | RawQueryList | RawQueryNode | RawQueryRelationship |
     RawQueryPath
 
-type Counters = {
+export type Counters = {
     containsUpdates: boolean
     nodesCreated: number
     nodesDeleted: number
@@ -72,7 +73,7 @@ type Counters = {
     systemUpdates: number
 }
 
-type ProfiledQueryPlan = {
+export type ProfiledQueryPlan = {
     dbHits: number
     records: number
     hasPageCacheStats: boolean
@@ -86,7 +87,7 @@ type ProfiledQueryPlan = {
     children: ProfiledQueryPlan[]
 }
 
-type NotificationShape = {
+export type NotificationShape = {
     code: string
     title: string
     description: string
@@ -99,96 +100,141 @@ type NotificationShape = {
     category: string
 }
 
-type RawQueryData = {
+export type RawQueryData = {
     fields: string[]
     values: RawQueryValue[][]
 }
 
-export type RawQueryResponse = {
+export type RawQuerySuccessResponse = {
     data: RawQueryData
     counters: Counters
     bookmarks: string[]
     profiledQueryPlan?: ProfiledQueryPlan
-    errors?: []
     notifications?: NotificationShape[]
     [str: string]: unknown
 }
 
+export type RawQueryError = {
+    code: string,
+    message: string
+    error?: string
+}
+
+
+export type RawQueryFailuresResponse = {
+    errors: RawQueryError[]
+}
+
+export type RawQueryResponse = RawQuerySuccessResponse | RawQueryFailuresResponse
+
+const NEO4J_QUERY_CONTENT_TYPE = 'application/vnd.neo4j.query'
+
 export class QueryResponseCodec {
-    constructor(
-        private _config: types.InternalConfig,
-        private _contentType: string,
-        private _rawQueryResponse: RawQueryResponse) {
+    
+    static of(
+        config: types.InternalConfig,
+        contentType: string,
+        response: RawQueryResponse): QueryResponseCodec {
 
-    }
-
-    get hasError(): boolean {
-        if (this._rawQueryResponse.errors == null) {
-            return false
+        if (isSuccess(response)) {
+            if (contentType === NEO4J_QUERY_CONTENT_TYPE) {
+                return new QuerySuccessResponseCodec(config, response)
+            }
+            return new QueryFailureResponseCodec(newError(
+                `Wrong content-type. Expected "${NEO4J_QUERY_CONTENT_TYPE}", but got "${contentType}".`,
+                error.PROTOCOL_ERROR
+            ))
         }
-        return this._rawQueryResponse.errors.length !== 0
+
+        return new QueryFailureResponseCodec(response.errors?.length > 0 ?
+            newError(
+                response.errors[0].message,
+                // TODO: REMOVE THE ?? AND .ERROR WHEN SERVER IS FIXED
+                response.errors[0].code ?? response.errors[0].error
+            ) :
+            newError('Server replied an empty error response', error.PROTOCOL_ERROR))
     }
 
-    get error(): Error {
-        return newError(
-            // @ts-expect-error
-            this._rawQueryResponse.errors[0].message,
-            // @ts-expect-error
-            this._rawQueryResponse.errors[0].error ?? this._rawQueryResponse.errors[0].code
-        )
+    get error(): Error | undefined {
+        throw new Error('Not implemented')
     }
 
     get keys(): string[] {
-        return this._rawQueryResponse.data.fields
+        throw new Error('Not implemented')
+    }
+
+    get meta(): Record<string, unknown> {
+        throw new Error('Not implemented')
     }
 
     *stream(): Generator<any[]> {
-        for (const value of this._rawQueryResponse.data.values) {
-            yield value.map(this._decodeValue.bind(this)) 
+        throw new Error('Not implemented')
+    }
+}
+
+class QuerySuccessResponseCodec extends QueryResponseCodec {
+
+    constructor(
+        private _config: types.InternalConfig,
+        private readonly _response: RawQuerySuccessResponse) {
+        super()
+    }
+
+    get error(): Error | undefined {
+        return undefined
+    }
+
+    get keys(): string[] {
+        return this._response.data.fields
+    }
+
+    *stream(): Generator<any[]> {
+        for (const value of this._response.data.values) {
+            yield value.map(this._decodeValue.bind(this))
         }
         return
     }
 
     get meta(): Record<string, unknown> {
         return {
-            bookmark: this._rawQueryResponse.bookmarks,
-            stats: this._decodeStats(this._rawQueryResponse.counters),
-            profile: this._rawQueryResponse.profiledQueryPlan != null ? 
-                this._decodeProfile(this._rawQueryResponse.profiledQueryPlan): null,
-            notifications: this._rawQueryResponse.notifications
+            bookmark: this._response.bookmarks,
+            stats: this._decodeStats(this._response.counters),
+            profile: this._response.profiledQueryPlan != null ?
+                this._decodeProfile(this._response.profiledQueryPlan) : null,
+            notifications: this._response.notifications
         }
     }
 
     private _decodeStats(counters: Counters): Record<string, unknown> {
         return Object.fromEntries(
-                Object.entries(counters)
-                    .map(([key, value]) => [key, typeof value === 'number' ? this._normalizeInteger(int(value)): value])
+            Object.entries(counters)
+                .map(([key, value]) => [key, typeof value === 'number' ? this._normalizeInteger(int(value)) : value])
         )
     }
 
     private _decodeProfile(queryPlan: ProfiledQueryPlan): Record<string, unknown> {
         return Object.fromEntries(
-                Object.entries(queryPlan)
-                    .map(([key, value]) => {
-                        let actualKey: string = key
-                        let actualValue: unknown = value
-                        switch(key) {
-                            case 'children':
-                                actualValue = (value as ProfiledQueryPlan[]).map(this._decodeProfile.bind(this))
-                                break
-                            case 'arguments':
-                                actualKey = 'args'
-                                actualValue = Object.fromEntries(Object.entries(value as {})
-                                    .map(([k, v]) => [k, this._decodeValue(v as RawQueryValue)]))
-                                break
-                            case 'records':
-                                actualKey = 'rows'
-                                break 
-                            default:
-                                break
-                        }
-                        return [actualKey, actualValue]
-                    })
+            Object.entries(queryPlan)
+                .map(([key, value]) => {
+                    let actualKey: string = key
+                    let actualValue: unknown = value
+                    switch (key) {
+                        case 'children':
+                            actualValue = (value as ProfiledQueryPlan[]).map(this._decodeProfile.bind(this))
+                            break
+                        case 'arguments':
+                            actualKey = 'args'
+                            actualValue = Object.fromEntries(Object.entries(value as {})
+                                .map(([k, v]) => [k, this._decodeValue(v as RawQueryValue)]))
+                            break
+                        case 'records':
+                            actualKey = 'rows'
+                            break
+                        default:
+                            break
+                    }
+                    return [actualKey, actualValue]
+                })
         )
     }
 
@@ -263,7 +309,7 @@ export class QueryResponseCodec {
         // @ts-expect-error
         const [nanosecondString, offsetHourString, isPositive]: [string, string, boolean] = nanosecondAndOffsetString.indexOf('+') >= 0 ?
             [...nanosecondAndOffsetString.split('+'), true] : (
-                nanosecondAndOffsetString.indexOf('-') >= 0 ?  
+                nanosecondAndOffsetString.indexOf('-') >= 0 ?
                     [...nanosecondAndOffsetString.split('-'), false] :
                     [nanosecondAndOffsetString.slice(0, nanosecondAndOffsetString.length - 1), '0', true]
             )
@@ -306,9 +352,9 @@ export class QueryResponseCodec {
     _decodeZonedDateTime(value: string): DateTime<Integer | bigint | number> {
         // 2015-11-21T21:40:32.142Z[Antarctica/Troll]
         const [dateTimeStr, timeZoneIdEndWithAngleBrackets] = value.split('[')
-        const timeZoneId = timeZoneIdEndWithAngleBrackets.slice(0, timeZoneIdEndWithAngleBrackets.length -1)
+        const timeZoneId = timeZoneIdEndWithAngleBrackets.slice(0, timeZoneIdEndWithAngleBrackets.length - 1)
         const dateTime = this._decodeOffsetDateTime(dateTimeStr)
-        
+
         return new DateTime(
             dateTime.year,
             dateTime.month,
@@ -339,28 +385,28 @@ export class QueryResponseCodec {
         )
     }
 
-    _decodeLocalDateTime(value: string): LocalDateTime<Integer | bigint | number > {
-       // 2015-06-24T12:50:35.556
-       const [dateStr, timeStr] = value.split('T')
-       const date = this._decodeDate(dateStr)
-       const time = this._decodeLocalTime(timeStr)
-       return new LocalDateTime(
-           date.year,
-           date.month,
-           date.day,
-           time.hour,
-           time.minute,
-           time.second,
-           time.nanosecond
-       ) 
+    _decodeLocalDateTime(value: string): LocalDateTime<Integer | bigint | number> {
+        // 2015-06-24T12:50:35.556
+        const [dateStr, timeStr] = value.split('T')
+        const date = this._decodeDate(dateStr)
+        const time = this._decodeLocalTime(timeStr)
+        return new LocalDateTime(
+            date.year,
+            date.month,
+            date.day,
+            time.hour,
+            time.minute,
+            time.second,
+            time.nanosecond
+        )
     }
 
-    _decodeDuration(value: string): Duration<Integer | bigint | number > {
+    _decodeDuration(value: string): Duration<Integer | bigint | number> {
         // P14DT16H12M
         // Duration is PnW
 
         const durationStringWithP = value.slice(1, value.length)
-        
+
         if (durationStringWithP.endsWith('W')) {
             const weeksString = durationStringWithP.slice(0, durationStringWithP.length - 1)
             const weeks = this._decodeInteger(weeksString)
@@ -378,7 +424,7 @@ export class QueryResponseCodec {
             if (ch >= '0' && ch <= '9' || ch === '.') {
                 currentNumber = currentNumber + ch
             } else {
-                switch(ch) {
+                switch (ch) {
                     case 'M':
                         if (timePart) {
                             throw newError(`Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
@@ -434,14 +480,14 @@ export class QueryResponseCodec {
 
 
         const splittedOnSeparator = value.split(';')
-        if (splittedOnSeparator.length !== 2 || !splittedOnSeparator[0].startsWith('SRID=') || 
+        if (splittedOnSeparator.length !== 2 || !splittedOnSeparator[0].startsWith('SRID=') ||
             !(splittedOnSeparator[1].startsWith('POINT (') || splittedOnSeparator[1].startsWith('POINT Z ('))) {
             return createProtocolError()
         }
 
         const [_, sridString] = splittedOnSeparator[0].split('=')
         const srid = this._normalizeInteger(int(sridString))
-        
+
         const [__, coordinatesString] = splittedOnSeparator[1].split('(')
         const [x, y, z] = coordinatesString.substring(0, coordinatesString.length - 1).split(" ").filter(c => c != null).map(parseFloat)
 
@@ -466,8 +512,8 @@ export class QueryResponseCodec {
     _decodeNode(value: NodeShape): Node<bigint | number | Integer> {
         return new Node(
             // @ts-expect-error identity doesn't return
-            undefined, 
-            value._labels, 
+            undefined,
+            value._labels,
             this._decodeMap(value._properties ?? {}),
             value._element_id
         )
@@ -490,7 +536,7 @@ export class QueryResponseCodec {
     _decodePath(value: PathShape): Path<bigint | number | Integer> {
         const decoded = value.map(v => this._decodeValue(v))
         type SegmentAccumulator = [] | [Node] | [Node, Relationship]
-        type Accumulator = { acc: SegmentAccumulator, segments: PathSegment[]}
+        type Accumulator = { acc: SegmentAccumulator, segments: PathSegment[] }
 
         return new Path(
             decoded[0] as Node,
@@ -498,11 +544,13 @@ export class QueryResponseCodec {
             // @ts-expect-error
             decoded.reduce((previous: Accumulator, current: Node | Relationship): Accumulator => {
                 if (previous.acc.length === 2) {
-                    return { acc: [current as Node], segments: [...previous.segments,
-                     new PathSegment(previous.acc[0], previous.acc[1], current as Node)]}
+                    return {
+                        acc: [current as Node], segments: [...previous.segments,
+                        new PathSegment(previous.acc[0], previous.acc[1], current as Node)]
+                    }
                 }
-                return { ...previous, acc: [...previous.acc, current] as SegmentAccumulator}
-            }, { acc: [], segments: []}).segments
+                return { ...previous, acc: [...previous.acc, current] as SegmentAccumulator }
+            }, { acc: [], segments: [] }).segments
         )
     }
 
@@ -516,12 +564,43 @@ export class QueryResponseCodec {
     }
 }
 
+class QueryFailureResponseCodec extends QueryResponseCodec {
+    constructor(private readonly _error: Error) {
+        super()
+    }
+
+    get error(): Error | undefined {
+        return this._error
+    }
+
+    get keys(): string[] {
+        throw this._error
+    }
+
+    get meta(): Record<string, unknown> {
+        throw this._error
+    }
+
+    stream(): Generator<any[], any, unknown> {
+        throw this._error
+    }
+}
+
 export type QueryRequestCodecConfig = Pick<RunQueryConfig, 'bookmarks' | 'txConfig' | 'mode' | 'impersonatedUser'>
 
 export class QueryRequestCodec {
     private _body?: Record<string, unknown>
 
-    constructor(
+    static of(
+        auth: types.AuthToken,
+        query: string,
+        parameters?: Record<string, unknown> | undefined,
+        config?: QueryRequestCodecConfig | undefined
+    ): QueryRequestCodec {
+        return new QueryRequestCodec(auth, query, parameters, config)
+    }
+
+    private constructor(
         private _auth: types.AuthToken,
         private _query: string,
         private _parameters?: Record<string, unknown> | undefined,
@@ -530,26 +609,28 @@ export class QueryRequestCodec {
 
     }
 
-    get contentType (): string {
-        return 'application/vnd.neo4j.query'
+
+
+    get contentType(): string {
+        return NEO4J_QUERY_CONTENT_TYPE
     }
 
-    get accept (): string {
-        return 'application/vnd.neo4j.query, application/json'
+    get accept(): string {
+        return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
     }
 
-    get authorization (): string {
-        switch(this._auth.scheme) {
+    get authorization(): string {
+        switch (this._auth.scheme) {
             case 'bearer':
                 return `Bearer ${btoa(this._auth.credentials)}`
             case 'basic':
                 return `Basic ${btoa(`${this._auth.principal}:${this._auth.credentials}`)}`
             default:
                 throw new Error(`Authorization scheme "${this._auth.scheme}" is not supported.`)
-        }   
+        }
     }
 
-    get body (): Record<string, unknown> {
+    get body(): Record<string, unknown> {
         if (this._body != null) {
             return this._body
         }
@@ -564,7 +645,7 @@ export class QueryRequestCodec {
         }
 
         if (this._config?.bookmarks != null && !this._config.bookmarks.isEmpty()) {
-            this._body.bookmarks =  this._config?.bookmarks?.values()
+            this._body.bookmarks = this._config?.bookmarks?.values()
         }
 
         if (this._config?.txConfig.timeout != null) {
@@ -593,7 +674,7 @@ export class QueryRequestCodec {
     }
 
     _encodeValue(value: unknown): RawQueryValue {
-        if (value === null ) {
+        if (value === null) {
             return { $type: 'Null', _value: null }
         } else if (value === true || value === false) {
             return { $type: 'Boolean', _value: value }
@@ -602,50 +683,57 @@ export class QueryRequestCodec {
         } else if (typeof value === 'string') {
             return { $type: 'String', _value: value }
         } else if (typeof value === 'bigint') {
-            return { $type: 'Integer', _value: value.toString()}
+            return { $type: 'Integer', _value: value.toString() }
         } else if (isInt(value)) {
             return { $type: 'Integer', _value: value.toString() }
         } else if (value instanceof Uint8Array) {
-            return { $type: 'Base64', _value: btoa(String.fromCharCode.apply(null, value))}
+            return { $type: 'Base64', _value: btoa(String.fromCharCode.apply(null, value)) }
         } else if (value instanceof Array) {
-            return { $type: 'List', _value: value.map(this._encodeValue.bind(this))}
+            return { $type: 'List', _value: value.map(this._encodeValue.bind(this)) }
         } else if (isIterable(value)) {
-            return this._encodeValue(Array.from(value)) 
+            return this._encodeValue(Array.from(value))
         } else if (isPoint(value)) {
-            return { $type: 'Point', _value: value.z == null ?
-                `SRID=${int(value.srid).toString()};POINT (${value.x} ${value.y})`:
-                `SRID=${int(value.srid).toString()};POINT Z (${value.x} ${value.y} ${value.z})`
+            return {
+                $type: 'Point', _value: value.z == null ?
+                    `SRID=${int(value.srid).toString()};POINT (${value.x} ${value.y})` :
+                    `SRID=${int(value.srid).toString()};POINT Z (${value.x} ${value.y} ${value.z})`
             }
         } else if (isDuration(value)) {
-            return { $type: 'Duration', _value: value.toString()}
+            return { $type: 'Duration', _value: value.toString() }
         } else if (isLocalTime(value)) {
-            return { $type: 'LocalTime', _value: value.toString()}
+            return { $type: 'LocalTime', _value: value.toString() }
         } else if (isTime(value)) {
-            return { $type: 'Time', _value: value.toString()}
+            return { $type: 'Time', _value: value.toString() }
         } else if (isDate(value)) {
-            return { $type: 'Date', _value: value.toString()}
+            return { $type: 'Date', _value: value.toString() }
         } else if (isLocalDateTime(value)) {
-            return { $type: 'LocalDateTime', _value:  value.toString() }
+            return { $type: 'LocalDateTime', _value: value.toString() }
         } else if (isDateTime(value)) {
             if (value.timeZoneId != null) {
-                return { $type: 'ZonedDateTime', _value: value.toString()}
+                return { $type: 'ZonedDateTime', _value: value.toString() }
             }
-            return { $type: 'OffsetDateTime', _value: value.toString()}
-        } else if (isRelationship(value) || isNode(value) || isPath(value) || isPathSegment(value) || isUnboundRelationship(value) ) {
+            return { $type: 'OffsetDateTime', _value: value.toString() }
+        } else if (isRelationship(value) || isNode(value) || isPath(value) || isPathSegment(value) || isUnboundRelationship(value)) {
             throw newError('Graph types can not be ingested to the server', error.PROTOCOL_ERROR)
         } else if (typeof value === 'object') {
-            return { $type: "Map", _value: this._encodeParameters(value as Record<string, unknown>)}
+            return { $type: "Map", _value: this._encodeParameters(value as Record<string, unknown>) }
         } else {
             throw newError(`Unable to convert parameter to http request. Value: ${value}`, error.PROTOCOL_ERROR)
         }
     }
 }
 
-function isIterable<T extends unknown = unknown> (obj: unknown): obj is Iterable<T> {
+function isIterable<T extends unknown = unknown>(obj: unknown): obj is Iterable<T> {
     if (obj == null) {
-      return false
+        return false
     }
     // @ts-expect-error
     return typeof obj[Symbol.iterator] === 'function'
 }
-  
+
+function isSuccess(obj: RawQueryResponse): obj is RawQuerySuccessResponse {
+    if (obj.errors != null) {
+        return false
+    }
+    return true
+}

@@ -15,8 +15,9 @@
  * limitations under the License.
  */
 
-import { auth, types, internal, int, Date, Time, LocalTime, DateTime, LocalDateTime, Point, Duration, Node, Relationship, UnboundRelationship, Path, PathSegment } from "neo4j-driver-core";
-import { QueryRequestCodec, QueryRequestCodecConfig } from "../../../src/http-connection/query.codec";
+import { auth, types, internal, int, Date, Time, LocalTime, DateTime, LocalDateTime, Point, Duration, Node, Relationship, UnboundRelationship, Path, PathSegment, newError } from "neo4j-driver-core";
+import { QueryRequestCodec, QueryRequestCodecConfig, QueryResponseCodec, RawQueryResponse } from "../../../src/http-connection/query.codec";
+import exp from "constants";
 
 describe('QueryRequestCodec', () => {
     const DEFAULT_AUTH = auth.basic('neo4j', 'password')
@@ -163,10 +164,10 @@ describe('QueryRequestCodec', () => {
             ['ZonedAndOffsetDateTime', v(new DateTime(1988, 8, 23, 12, 50, 35, 556000000, 3600, 'Antarctica/Troll'), { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' })],
             ['LocalDateTime', v(new LocalDateTime(2001, 5, 3, 13, 45, 0, 3404004), { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' })],
             ['Duration', v(new Duration(0, 14, 16, 0), { $type: 'Duration', _value: 'P0M14DT16S' })],
-            ['WGS Point 2D', v(new Point(int(4326), 1.2, 3.4), { '$type': 'Point', _value: 'SRID=4326;POINT (1.2 3.4)'})],
-            ['CARTESIAN Point 2D', v(new Point(int(7203), 1.2, 3.4), { '$type': 'Point', _value: 'SRID=7203;POINT (1.2 3.4)'})],
-            ['WGS Point 3D', v(new Point(int(4979), 1.2, 3.4, 5.6), { '$type': 'Point', _value: 'SRID=4979;POINT Z (1.2 3.4 5.6)'})],
-            ['CARTESIAN Point 3D', v(new Point(int(9157), 1.2, 3.4, 5.6), { '$type': 'Point', _value: 'SRID=9157;POINT Z (1.2 3.4 5.6)'})],
+            ['WGS Point 2D', v(new Point(int(4326), 1.2, 3.4), { '$type': 'Point', _value: 'SRID=4326;POINT (1.2 3.4)' })],
+            ['CARTESIAN Point 2D', v(new Point(int(7203), 1.2, 3.4), { '$type': 'Point', _value: 'SRID=7203;POINT (1.2 3.4)' })],
+            ['WGS Point 3D', v(new Point(int(4979), 1.2, 3.4, 5.6), { '$type': 'Point', _value: 'SRID=4979;POINT Z (1.2 3.4 5.6)' })],
+            ['CARTESIAN Point 3D', v(new Point(int(9157), 1.2, 3.4, 5.6), { '$type': 'Point', _value: 'SRID=9157;POINT Z (1.2 3.4 5.6)' })],
         ])('should handle parameters of type %s', (_, [param, expected]) => {
             const codec = subject({
                 parameters: {
@@ -184,7 +185,7 @@ describe('QueryRequestCodec', () => {
 
         it.each([
             ['Node', new Node(234, [], {})],
-            ['Relationship', new Relationship(2, 1, 4, '1', {}) ],
+            ['Relationship', new Relationship(2, 1, 4, '1', {})],
             ['UnboundRelationship', new UnboundRelationship(1, 'a', {})],
             ['Path', new Path(new Node(1, [], {}), new Node(1, [], {}), [])],
             ['PathSegment', new PathSegment(new Node(1, [], {}), new Relationship(2, 1, 4, '1', {}), new Node(1, [], {}))],
@@ -195,7 +196,7 @@ describe('QueryRequestCodec', () => {
                 }
             })
 
-            expect(() => codec.body ).toThrow('Graph types can not be ingested to the server')
+            expect(() => codec.body).toThrow('Graph types can not be ingested to the server')
 
         })
 
@@ -209,7 +210,7 @@ describe('QueryRequestCodec', () => {
         parameters: Record<string, unknown>,
         config: QueryRequestCodecConfig
     }>) {
-        return new QueryRequestCodec(
+        return QueryRequestCodec.of(
             params?.auth ?? DEFAULT_AUTH,
             params?.query ?? DEFAULT_QUERY,
             params?.parameters,
@@ -224,5 +225,330 @@ describe('QueryRequestCodec', () => {
             expected = (expected as unknown as Function)() as K
         }
         return [value, expected]
+    }
+})
+
+describe('QueryResponseCodec', () => {
+    const DEFAULT_CONFIG = {}
+    const DEFAULT_CONTENT_TYPE = 'application/vnd.neo4j.query'
+    const DEFAULT_RAW_RESPONSE: RawQueryResponse = {
+        "data": {
+            "fields": [
+                "1"
+            ],
+            "values": [
+                [
+                    {
+                        "$type": "Integer",
+                        "_value": "1"
+                    }
+                ]
+            ]
+        },
+        "counters": {
+            "containsUpdates": false,
+            "nodesCreated": 0,
+            "nodesDeleted": 0,
+            "propertiesSet": 0,
+            "relationshipsCreated": 0,
+            "relationshipsDeleted": 0,
+            "labelsAdded": 0,
+            "labelsRemoved": 0,
+            "indexesAdded": 0,
+            "indexesRemoved": 0,
+            "constraintsAdded": 0,
+            "constraintsRemoved": 0,
+            "containsSystemUpdates": false,
+            "systemUpdates": 0
+        },
+        "bookmarks": [
+            "FB:kcwQUln6E/U2SUyIXRY1rTIt8wKQ"
+        ]
+    }
+
+    describe('.error', () => {
+        it('should handle success', () => {
+            const codec = subject()
+
+            expect(codec.error).toBe(undefined)
+        })
+
+        it('should handle failures', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: [{
+                        message: 'Something wrong is mighty right',
+                        code: 'Neo.ClientError.Made.Up'
+                    }]
+                }
+            })
+
+            expect(codec.error).toBeDefined()
+            expect(codec.error?.message).toEqual('Something wrong is mighty right')
+            // @ts-expect-error
+            expect(codec.error?.code).toEqual('Neo.ClientError.Made.Up')
+
+        })
+
+        it('should handle empty error list', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: []
+                }
+            })
+
+            expect(codec.error).toBeDefined()
+            expect(codec.error?.message).toEqual('Server replied an empty error response')
+            // @ts-expect-error
+            expect(codec.error?.code).toEqual('ProtocolError')
+        })
+
+        it('should consider wrong content type as ProtocolError', () => {
+            const codec = subject({
+                contentType: 'application/json'
+            })
+
+            expect(codec.error).toBeDefined()
+            expect(codec.error?.message).toEqual('Wrong content-type. Expected "application/vnd.neo4j.query", but got "application/json".')
+            // @ts-expect-error
+            expect(codec.error?.code).toEqual('ProtocolError')
+        })
+    })
+
+    describe('.keys', () => {
+        it.each([
+            [[]],
+            [['key']],
+            [['key', 'key2']],
+        ])('should handle keys = %s', (keys: string[]) => {
+            const codec = subject({
+                rawQueryResponse: {
+                    ...DEFAULT_RAW_RESPONSE,
+                    data: {
+                        ...DEFAULT_RAW_RESPONSE.data,
+                        fields: keys
+                    }
+                }
+            })
+
+            expect(codec.keys).toBe(keys)
+        })
+
+        it.each(
+            errorConditionsFixture()
+        )('should handle %s failures', (_: string, param: SubjectParams) => {
+            const codec = subject(param)
+
+            expect(() => codec.keys).toThrow(codec.error)
+        })
+    })
+
+    describe('.meta', () => {
+
+        it.each([
+            [undefined],
+            [[]],
+            [['FB:kcwQUln6E/U2SUyIXRY1rTIt8wKQ']],
+            [['FB:kcwQUln6E/U2SUyIXRY1rTIt8wKQ', 'FB:kcwQUln6E/U2SUyIXRY1rTIt9w1Q']]
+        ])('should handle bookmarks = %s', (bookmarks) => {
+            const codec = subject({
+                rawQueryResponse: {
+                    ...DEFAULT_RAW_RESPONSE,
+                    bookmarks: bookmarks as []
+                }
+            })
+
+            expect(codec.meta.bookmark).toEqual(bookmarks)
+        })
+
+        it.each([
+            // using custom integer
+            ...[undefined, {}, { disableLosslessIntegers: false }].flatMap(config => [
+                [{}, {}, config],
+                [{ containsUpdates: true }, { containsUpdates: true }, config],
+                [{
+                    containsUpdates: true,
+                    nodesCreated: 12,
+                    nodesDeleted: 45,
+                    propertiesSet: -1,
+                    relationshipsCreated: 234,
+                    relationshipsDeleted: 2,
+                    labelsAdded: 5,
+                    labelsRemoved: 2,
+                    indexesAdded: 312334,
+                    indexesRemoved: 1,
+                    constraintsAdded: 2198392,
+                    constraintsRemoved: 3232,
+                    containsSystemUpdates: false,
+                    systemUpdates: 13232
+                }, {
+                    containsUpdates: true,
+                    nodesCreated: int(12),
+                    nodesDeleted: int(45),
+                    propertiesSet: int(-1),
+                    relationshipsCreated: int(234),
+                    relationshipsDeleted: int(2),
+                    labelsAdded: int(5),
+                    labelsRemoved: int(2),
+                    indexesAdded: int(312334),
+                    indexesRemoved: int(1),
+                    constraintsAdded: int(2198392),
+                    constraintsRemoved: int(3232),
+                    containsSystemUpdates: false,
+                    systemUpdates: int(13232)
+                }, config],
+                [{
+                    madeUpStuff: 123,
+                    nodesDeleted: "234"
+                },
+                {
+                    madeUpStuff: int(123),
+                    nodesDeleted: "234"
+                }, config]
+            ]),
+
+            // disabling lossless integers
+            ...[{ disableLosslessIntegers: true }, { useBigInt: false, disableLosslessIntegers: true }].flatMap(config => [
+                [{}, {}, { disableLosslessIntegers: true }],
+                [{ containsUpdates: true }, { containsUpdates: true }, config],
+                [{
+                    containsUpdates: true,
+                    nodesCreated: 12,
+                    nodesDeleted: 45,
+                    propertiesSet: -1,
+                    relationshipsCreated: 234,
+                    relationshipsDeleted: 2,
+                    labelsAdded: 5,
+                    labelsRemoved: 2,
+                    indexesAdded: 312334,
+                    indexesRemoved: 1,
+                    constraintsAdded: 2198392,
+                    constraintsRemoved: 3232,
+                    containsSystemUpdates: false,
+                    systemUpdates: 13232
+                }, {
+                    containsUpdates: true,
+                    nodesCreated: 12,
+                    nodesDeleted: 45,
+                    propertiesSet: -1,
+                    relationshipsCreated: 234,
+                    relationshipsDeleted: 2,
+                    labelsAdded: 5,
+                    labelsRemoved: 2,
+                    indexesAdded: 312334,
+                    indexesRemoved: 1,
+                    constraintsAdded: 2198392,
+                    constraintsRemoved: 3232,
+                    containsSystemUpdates: false,
+                    systemUpdates: 13232
+                }, config],
+                [{
+                    madeUpStuff: 123,
+                    nodesDeleted: "234"
+                },
+                {
+                    madeUpStuff: 123,
+                    nodesDeleted: "234"
+                }, config]
+            ]),
+
+            // use bigint
+            ...[{ useBigInt: true }, { useBigInt: true, disableLosslessIntegers: true }, { useBigInt: true, disableLosslessIntegers: false }]
+                .flatMap(config => [[{}, {}, config],
+                [{ containsUpdates: true }, { containsUpdates: true }, config],
+                [{
+                    containsUpdates: true,
+                    nodesCreated: 12,
+                    nodesDeleted: 45,
+                    propertiesSet: -1,
+                    relationshipsCreated: 234,
+                    relationshipsDeleted: 2,
+                    labelsAdded: 5,
+                    labelsRemoved: 2,
+                    indexesAdded: 312334,
+                    indexesRemoved: 1,
+                    constraintsAdded: 2198392,
+                    constraintsRemoved: 3232,
+                    containsSystemUpdates: false,
+                    systemUpdates: 13232
+                }, {
+                    containsUpdates: true,
+                    nodesCreated: 12n,
+                    nodesDeleted: 45n,
+                    propertiesSet: -1n,
+                    relationshipsCreated: 234n,
+                    relationshipsDeleted: 2n,
+                    labelsAdded: 5n,
+                    labelsRemoved: 2n,
+                    indexesAdded: 312334n,
+                    indexesRemoved: 1n,
+                    constraintsAdded: 2198392n,
+                    constraintsRemoved: 3232n,
+                    containsSystemUpdates: false,
+                    systemUpdates: 13232n
+                }, config],
+                [{
+                    madeUpStuff: 123n,
+                    nodesDeleted: "234"
+                },
+                {
+                    madeUpStuff: 123n,
+                    nodesDeleted: "234"
+                }, config]])
+            ,
+        ])('should handle stats (%o)', (counters: any, expected: any, config?: Partial<types.InternalConfig>) => {
+            const codec = subject({
+                rawQueryResponse: {
+                    ...DEFAULT_RAW_RESPONSE,
+                    counters
+                },
+                config
+            })
+
+            expect(codec.meta.stats).toEqual(expected)
+        })
+
+        it.each(
+            errorConditionsFixture()
+        )('should handle %s failures', (_: string, param: SubjectParams) => {
+            const codec = subject(param)
+
+            expect(() => codec.meta).toThrow(codec.error)
+        })
+    })
+
+    type SubjectParams = Partial<{
+        config: types.InternalConfig,
+        contentType: string,
+        rawQueryResponse: RawQueryResponse
+    }>
+
+    function subject(param?: SubjectParams) {
+        return QueryResponseCodec.of(
+            { ...DEFAULT_CONFIG, ...param?.config },
+            param?.contentType ?? DEFAULT_CONTENT_TYPE,
+            param?.rawQueryResponse ?? DEFAULT_RAW_RESPONSE
+        )
+    }
+
+    function errorConditionsFixture(): [string, SubjectParams][] {
+        return [
+            ['response returned', {
+                rawQueryResponse: {
+                    errors: [{
+                        message: 'Something wrong is mighty right',
+                        code: 'Neo.ClientError.Made.Up'
+                    }]
+                }
+            }],
+            ['empty list', {
+                rawQueryResponse: {
+                    errors: []
+                }
+            }],
+            ['content type', {
+                contentType: 'application/json'
+            }]
+        ]
     }
 })

@@ -65,14 +65,14 @@ export default class HttpConnection extends Connection {
             server: this._address,
         })
 
-        const requestCodec = new QueryRequestCodec(
+        const requestCodec = QueryRequestCodec.of(
             this._auth,
             query,
-            parameters, 
+            parameters,
             config
         )
 
-        this._abortController =  new AbortController()
+        this._abortController = new AbortController()
 
         const request: RequestInit & { url: string } = {
             url: this._getTransactionApi(config?.database!),
@@ -102,9 +102,9 @@ export default class HttpConnection extends Connection {
                 }
                 this._log?.debug(`${this} ${JSON.stringify(rawQueryResponse)}`)
                 const batchSize = config?.fetchSize ?? Number.MAX_SAFE_INTEGER
-                const codec = new QueryResponseCodec(this._config, contentType, rawQueryResponse);
+                const codec = QueryResponseCodec.of(this._config, contentType, rawQueryResponse);
 
-                if (codec.hasError) {
+                if (codec.error) {
                     throw codec.error
                 }
                 observer.onKeys(codec.keys)
@@ -127,7 +127,7 @@ export default class HttpConnection extends Connection {
                 }
 
                 observer.onCompleted(codec.meta)
-                
+
             })
             .catch(this._handleAndReThrown.bind(this))
             .catch(error => observer.onError(error))
@@ -138,15 +138,15 @@ export default class HttpConnection extends Connection {
         return observer
     }
 
-    private _handleAndReThrown (error:  Error & { code: string, retriable: boolean }) {
+    private _handleAndReThrown(error: Error & { code: string, retriable: boolean }) {
         throw this._errorHandler(error)
     }
 
-    private _getTransactionApi(database: string):string {
+    private _getTransactionApi(database: string): string {
         return this._queryEndpoint.replace('{databaseName}', database)
     }
 
-    static async discover ({ scheme, address }: { scheme: HttpScheme, address: internal.serverAddress.ServerAddress }): Promise<{
+    static async discover({ scheme, address }: { scheme: HttpScheme, address: internal.serverAddress.ServerAddress }): Promise<{
         query: string
         version: string
         edition: string
@@ -154,7 +154,7 @@ export default class HttpConnection extends Connection {
         return await fetch(`${scheme}://${address.asHostPort()}`, {
             headers: {
                 Accept: 'application/json',
-            } 
+            }
         })
             .then(async (res) => (await res.json()) as Record<string, string>)
             .then(json => {
@@ -163,8 +163,8 @@ export default class HttpConnection extends Connection {
 
                 }
                 return { query: json.query, version: json.neo4j_version, edition: json.neo4j_edition }
-            })  
-            .catch(e => { 
+            })
+            .catch(e => {
                 throw newError(`Failure discovering endpoints. Caused by: ${e.message}`, 'SERVICE_UNAVAILABLE', e)
             })
     }
@@ -189,7 +189,7 @@ export default class HttpConnection extends Connection {
         return this._release()
     }
 
-    toString () {
+    toString() {
         return `HttpConnection [${this._id}]`
     }
 }
