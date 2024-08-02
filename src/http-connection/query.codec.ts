@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import { newError, Node, Relationship, int, error, types, Integer, Time, Date, LocalTime, Point, DateTime, LocalDateTime, Duration, isInt, isPoint, isDuration, isLocalTime, isTime, isDate, isLocalDateTime, isDateTime, isRelationship, isPath, isNode, isPathSegment, Path, PathSegment, internal, isUnboundRelationship, auth } from "neo4j-driver-core"
+import { newError, Node, Relationship, int, error, types, Integer, Time, Date, LocalTime, Point, DateTime, LocalDateTime, Duration, isInt, isPoint, isDuration, isLocalTime, isTime, isDate, isLocalDateTime, isDateTime, isRelationship, isPath, isNode, isPathSegment, Path, PathSegment, internal, isUnboundRelationship } from "neo4j-driver-core"
 import { RunQueryConfig } from "neo4j-driver-core/types/connection"
-import { config } from "yargs"
 
 export type RawQueryValueTypes = 'Null' | 'Boolean' | 'Integer' | 'Float' | 'String' |
     'Time' | 'Date' | 'LocalTime' | 'ZonedDateTime' | 'OffsetDateTime' | 'LocalDateTime' |
@@ -130,7 +129,7 @@ export type RawQueryResponse = RawQuerySuccessResponse | RawQueryFailuresRespons
 const NEO4J_QUERY_CONTENT_TYPE = 'application/vnd.neo4j.query'
 
 export class QueryResponseCodec {
-    
+
     static of(
         config: types.InternalConfig,
         contentType: string,
@@ -242,7 +241,7 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
     private _decodeValue(value: RawQueryValue): unknown {
         switch (value.$type) {
             case "Null":
-                return value._value
+                return null
             case "Boolean":
                 return value._value
             case "Integer":
@@ -301,7 +300,7 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
         return parseFloat(value)
     }
 
-    _decodeTime(value: string): Time<Integer | bigint | number> {
+    _decodeTime(value: string): Time<Integer | bigint | number> | LocalTime<Integer | bigint | number> {
         // 12:50:35.556+01:00
         const [hourStr, minuteString, secondNanosecondAndOffsetString, offsetMinuteString] = value.split(':')
         const [secondStr, nanosecondAndOffsetString] = secondNanosecondAndOffsetString.split('.')
@@ -310,27 +309,45 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
         const [nanosecondString, offsetHourString, isPositive]: [string, string, boolean] = nanosecondAndOffsetString.indexOf('+') >= 0 ?
             [...nanosecondAndOffsetString.split('+'), true] : (
                 nanosecondAndOffsetString.indexOf('-') >= 0 ?
-                    [...nanosecondAndOffsetString.split('-'), false] :
-                    [nanosecondAndOffsetString.slice(0, nanosecondAndOffsetString.length - 1), '0', true]
+                    [...nanosecondAndOffsetString.split('-'), false] : (
+                        nanosecondAndOffsetString.indexOf('Z') >= 0 ?
+                            [nanosecondAndOffsetString.slice(0, nanosecondAndOffsetString.length - 1), undefined, true] :
+                            [nanosecondAndOffsetString.slice(0, nanosecondAndOffsetString.length - 1), '0', true]
+                    )
+
             )
 
 
         let nanosecond = int(nanosecondString.padEnd(9, '0'))
 
-        const timeZoneOffsetInSeconds = int(offsetHourString).multiply(60).add(int(offsetMinuteString)).multiply(60).multiply(isPositive ? 1 : -1)
-        return new Time(
+        if (offsetHourString != null) {
+            const timeZoneOffsetInSeconds = int(offsetHourString).multiply(60).add(int(offsetMinuteString)).multiply(60).multiply(isPositive ? 1 : -1)
+
+            return new Time(
+                this._decodeInteger(hourStr),
+                this._decodeInteger(minuteString),
+                this._decodeInteger(secondStr),
+                this._normalizeInteger(nanosecond),
+                this._normalizeInteger(timeZoneOffsetInSeconds))
+        }
+
+        return new LocalTime(
             this._decodeInteger(hourStr),
             this._decodeInteger(minuteString),
             this._decodeInteger(secondStr),
             this._normalizeInteger(nanosecond),
-            this._normalizeInteger(timeZoneOffsetInSeconds))
+        )
+
+
     }
 
     _decodeDate(value: string): Date<Integer | bigint | number> {
-        // 2015-03-26
-        const [yearStr, monthStr, dayStr] = value.split('-')
+        // (+|-)2015-03-26
+        // first might be signal or first digit on date
+        const first = value[0]
+        const [yearStr, monthStr, dayStr] = value.substring(1).split('-')
         return new Date(
-            this._decodeInteger(yearStr),
+            this._decodeInteger(first.concat(yearStr)),
             this._decodeInteger(monthStr),
             this._decodeInteger(dayStr)
         )
@@ -363,25 +380,37 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
             dateTime.minute,
             dateTime.second,
             dateTime.nanosecond,
-            dateTime.timeZoneOffsetSeconds,
+            isDateTime(dateTime) ? dateTime.timeZoneOffsetSeconds : undefined,
             timeZoneId
         )
     }
 
-    _decodeOffsetDateTime(value: string): DateTime<Integer | bigint | number> {
+    _decodeOffsetDateTime(value: string): DateTime<Integer | bigint | number> | LocalDateTime<Integer | bigint | number>{
         // 2015-06-24T12:50:35.556+01:00
         const [dateStr, timeStr] = value.split('T')
         const date = this._decodeDate(dateStr)
         const time = this._decodeTime(timeStr)
-        return new DateTime(
+        if (isTime(time)) {
+            return new DateTime(
+                date.year,
+                date.month,
+                date.day,
+                time.hour,
+                time.minute,
+                time.second,
+                time.nanosecond,
+                time.timeZoneOffsetSeconds 
+            )
+        }
+
+        return new LocalDateTime(
             date.year,
             date.month,
             date.day,
             time.hour,
             time.minute,
             time.second,
-            time.nanosecond,
-            time.timeZoneOffsetSeconds
+            time.nanosecond
         )
     }
 
@@ -414,14 +443,14 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
         }
 
         let month = '0'
-        let day = 'O'
+        let day = '0'
         let second = '0'
         let nanosecond = '0'
         let currentNumber = ''
         let timePart = false
 
         for (const ch of durationStringWithP) {
-            if (ch >= '0' && ch <= '9' || ch === '.') {
+            if (ch >= '0' && ch <= '9' || ch === '.' || ch === ',') {
                 currentNumber = currentNumber + ch
             } else {
                 switch (ch) {
@@ -441,7 +470,8 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
                         if (!timePart) {
                             throw newError(`Unexpected Duration component ${ch} in date part`, error.PROTOCOL_ERROR)
                         }
-                        [second, nanosecond] = currentNumber.split('.')
+                        const nanosecondSeparator = currentNumber.includes(',') ? ',' : '.';
+                        [second, nanosecond] = currentNumber.split(nanosecondSeparator)
                         break
                     case 'T':
                         timePart = true

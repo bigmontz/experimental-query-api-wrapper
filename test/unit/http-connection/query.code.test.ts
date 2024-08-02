@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import { auth, types, internal, int, Date, Time, LocalTime, DateTime, LocalDateTime, Point, Duration, Node, Relationship, UnboundRelationship, Path, PathSegment, newError } from "neo4j-driver-core";
-import { QueryRequestCodec, QueryRequestCodecConfig, QueryResponseCodec, RawQueryResponse } from "../../../src/http-connection/query.codec";
-import exp from "constants";
+import { auth, types, internal, int, Date, Time, LocalTime, DateTime, LocalDateTime, Point, Duration, Node, Relationship, UnboundRelationship, Path, PathSegment, newError, Integer } from "neo4j-driver-core";
+import { QueryRequestCodec, QueryRequestCodecConfig, QueryResponseCodec, RawQueryResponse, RawQueryValue } from "../../../src/http-connection/query.codec";
 
 describe('QueryRequestCodec', () => {
     const DEFAULT_AUTH = auth.basic('neo4j', 'password')
@@ -154,6 +153,7 @@ describe('QueryRequestCodec', () => {
             ['String', v('Hello, Greg!', { $type: 'String', _value: 'Hello, Greg!' })],
             ['ByteArray', v(new Uint8Array([0x60, 0x60, 0xB0, 0x17]), { $type: 'Base64', _value: 'YGCwFw==' })],
             ['List', v(['A', 12n], { $type: 'List', _value: [{ $type: 'String', _value: 'A' }, { $type: 'Integer', _value: '12' }] })],
+            ['Iterable', v(new Set(['A', 12n]), { $type: 'List', _value: [{ $type: 'String', _value: 'A' }, { $type: 'Integer', _value: '12' }] })],
             ['Map', v({ a: 'b', c: ['d'] }, { $type: 'Map', _value: { a: { $type: 'String', _value: 'b' }, c: { $type: 'List', _value: [{ $type: 'String', _value: 'd' }] } } })],
             ['Date', v(new Date(1988, 8, 23), { $type: 'Date', _value: '1988-08-23' })],
             ['Time', v(new Time(12, 50, 35, 556000000, 3600), { $type: 'Time', _value: '12:50:35.556000000+01:00' })],
@@ -344,7 +344,6 @@ describe('QueryResponseCodec', () => {
     })
 
     describe('.meta', () => {
-
         it.each([
             [undefined],
             [[]],
@@ -363,7 +362,7 @@ describe('QueryResponseCodec', () => {
 
         it.each([
             // using custom integer
-            ...[undefined, {}, { disableLosslessIntegers: false }].flatMap(config => [
+            ...useCustomIntegerConfigFixture().flatMap(config => [
                 [{}, {}, config],
                 [{ containsUpdates: true }, { containsUpdates: true }, config],
                 [{
@@ -408,7 +407,7 @@ describe('QueryResponseCodec', () => {
             ]),
 
             // disabling lossless integers
-            ...[{ disableLosslessIntegers: true }, { useBigInt: false, disableLosslessIntegers: true }].flatMap(config => [
+            ...useLossyIntegerConfigFixture().flatMap(config => [
                 [{}, {}, { disableLosslessIntegers: true }],
                 [{ containsUpdates: true }, { containsUpdates: true }, config],
                 [{
@@ -453,7 +452,7 @@ describe('QueryResponseCodec', () => {
             ]),
 
             // use bigint
-            ...[{ useBigInt: true }, { useBigInt: true, disableLosslessIntegers: true }, { useBigInt: true, disableLosslessIntegers: false }]
+            ...useBigIntConfigFixture()
                 .flatMap(config => [[{}, {}, config],
                 [{ containsUpdates: true }, { containsUpdates: true }, config],
                 [{
@@ -508,6 +507,537 @@ describe('QueryResponseCodec', () => {
             expect(codec.meta.stats).toEqual(expected)
         })
 
+        it.each([
+            ...[
+                ...useCustomIntegerConfigFixture(),
+                ...useBigIntConfigFixture(),
+                ...useLossyIntegerConfigFixture()
+            ].flatMap(config => [
+                [undefined, null, config],
+                [null, null, config],
+                [{
+                    dbHits: 123,
+                    records: 223,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 32233,
+                    time: 1234,
+                    operatorType: 'write',
+                    identifiers: ['a', 'b'],
+                }, {
+                    dbHits: 123,
+                    rows: 223,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 32233,
+                    time: 1234,
+                    operatorType: 'write',
+                    identifiers: ['a', 'b']
+                }, config],
+                ...useChildrenFixture().map(({ children, expectedChildren }) => [{
+                    dbHits: 123,
+                    records: 223,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 32233,
+                    time: 1234,
+                    operatorType: 'write',
+                    identifiers: ['a', 'b'],
+                    children: children
+                }, {
+                    dbHits: 123,
+                    rows: 223,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 32233,
+                    time: 1234,
+                    operatorType: 'write',
+                    identifiers: ['a', 'b'],
+                    children: expectedChildren
+                }, config])
+
+            ])
+        ])('should handle profile (%o)', (profiledQueryPlan: any, expected: any, config?: Partial<types.InternalConfig>) => {
+            const codec = subject({
+                rawQueryResponse: {
+                    ...DEFAULT_RAW_RESPONSE,
+                    profiledQueryPlan
+                },
+                config
+            })
+
+            expect(codec.meta.profile).toEqual(expected)
+        })
+
+        it.each([
+            ...[
+                ...useCustomIntegerConfigFixture().map(config => ({ toInt: int, config })),
+                ...useLossyIntegerConfigFixture().map(config => ({ toInt: (v: any) => int(v).toInt(), config })),
+                ...useBigIntConfigFixture().map(config => ({ toInt: (v: any) => int(v).toBigInt(), config })),
+            ].flatMap(({ toInt, config }) => [
+                ...[null, undefined, 'a'].map(_value => [`Null (value=${_value})`, { $type: 'Null', _value }, null, config]),
+                ...[false, true].map(_value => [`Boolean (value=${_value})`, { $type: 'Boolean', _value }, _value, config]),
+                ...["123", "-123456", "1937465"].map(_value => [`Integer (value=${_value})`, { $type: 'Integer', _value }, toInt(_value), config]),
+                ...["123", "-123456.56", "1937465.24"].map(_value => [`Float (value=${_value})`, { $type: 'Float', _value }, parseFloat(_value), config]),
+                ...["123", "Max", "", "Novela"].map(_value => [`String (value=${_value})`, { $type: 'String', _value }, _value, config]),
+                ...[
+                    ['12:14:59.00102-3:00', new Time(toInt(12), toInt(14), toInt(59), toInt(1020000), toInt(-10800))],
+                    ['00:12:01.0+0:15', new Time(toInt(0), toInt(12), toInt(1), toInt(0), toInt(900))]
+                ].map(([_value, expected]) => [`Time (value=${_value})`, { $type: 'Time', _value }, expected, config]),
+                ...[
+                    ['2010-06-15', new Date(toInt(2010), toInt(6), toInt(15))],
+                    ['-1986-01-12', new Date(toInt(-1986), toInt(1), toInt(12))],
+                    ['+0001-01-12', new Date(toInt(1), toInt(1), toInt(12))]
+                ].map(([_value, expected]) => [`Date (value=${_value})`, { $type: 'Date', _value }, expected, config]),
+                ...[
+                    ['2001-05-03T13:45:00.003404004', new LocalDateTime(toInt(2001), toInt(5), toInt(3), toInt(13), toInt(45), toInt(0), toInt(3404004))],
+                    ['-1987-01-05T10:15:20.0', new LocalDateTime(toInt(-1987), toInt(1), toInt(5), toInt(10), toInt(15), toInt(20), toInt(0))],
+                    ['+0001-01-05T10:15:20.0', new LocalDateTime(toInt(1), toInt(1), toInt(5), toInt(10), toInt(15), toInt(20), toInt(0))]
+                ].map(([_value, expected]) => [`LocalDateTime (value=${_value})`, { $type: 'LocalDateTime', _value }, expected, config]),
+                ...[
+                    ['1988-08-23T12:50:35.556000000Z[Antarctica/Troll]', new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll')],
+                    ['-1988-08-23T12:50:35.556000000+02:00[Europe/Berlin]', new DateTime(toInt(-1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(7200), 'Europe/Berlin')],
+                    ['+1986-08-23T12:50:35.556000000-03:00[America/Sao_Paulo]', new DateTime(toInt(1986), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(-10800), 'America/Sao_Paulo')]
+                ].map(([_value, expected]) => [`ZonedDateTime (value=${_value})`, { $type: 'ZonedDateTime', _value }, expected, config]),
+                ...[
+                    ['1988-08-23T12:50:35.556000000+02:00', new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(7200))],
+                    ['-1988-08-23T12:50:35.556000000+02:00', new DateTime(toInt(-1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(7200))],
+                    ['+1986-08-23T12:50:35.556000000-03:00', new DateTime(toInt(1986), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(-10800))]
+                ].map(([_value, expected]) => [`OffsetDateTime (value=${_value})`, { $type: 'OffsetDateTime', _value }, expected, config]),
+                ...[
+                    ['1988-08-23T12:50:35.556000000', new LocalDateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000))],
+                    ['-1988-08-23T12:50:35.556000000', new LocalDateTime(toInt(-1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000))],
+                    ['+1986-08-23T12:50:35.556000000', new LocalDateTime(toInt(1986), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000))]
+                ].map(([_value, expected]) => [`LocalDateTime (value=${_value})`, { $type: 'LocalDateTime', _value }, expected, config]),
+                ...[
+                    ['P10M', new Duration(toInt(10), toInt(0), toInt(0), toInt(0))],
+                    ['P15D', new Duration(toInt(0), toInt(15), toInt(0), toInt(0))],
+                    ['P10M15D', new Duration(toInt(10), toInt(15), toInt(0), toInt(0))],
+                    ['P10M15D', new Duration(toInt(10), toInt(15), toInt(0), toInt(0))],
+                    ['P10M15DT3S', new Duration(toInt(10), toInt(15), toInt(3), toInt(0))],
+                    ['P10M15DT0.000003S', new Duration(toInt(10), toInt(15), toInt(0), toInt(3000))],
+                    ['P10M15DT20.000003S', new Duration(toInt(10), toInt(15), toInt(20), toInt(3000))],
+                    ['P10M15DT20,000003S', new Duration(toInt(10), toInt(15), toInt(20), toInt(3000))],
+                    ['PT20,000003S', new Duration(toInt(0), toInt(0), toInt(20), toInt(3000))],
+                    ['PT0.000003S', new Duration(toInt(0), toInt(0), toInt(0), toInt(3000))],
+                    ['PT1S', new Duration(toInt(0), toInt(0), toInt(1), toInt(0))],
+                ].map(([_value, expected]) => [`Duration (value=${_value})`, { $type: 'Duration', _value }, expected, config]),
+                ...[
+                    ['SRID=4326;POINT (-1.2 3.4)', new Point(toInt(4326), -1.2, 3.4)],
+                    ['SRID=7203;POINT (1.2 -3.4)', new Point(toInt(7203), 1.2, -3.4)],
+                    ['SRID=4979;POINT Z (123.2 3.4 -35.624)', new Point(toInt(4979), 123.2, 3.4, -35.624)],
+                    ['SRID=9157;POINT Z (23.20 03.41 -35.06)', new Point(toInt(9157), 23.2, 3.41, -35.06)],
+                ].map(([_value, expected]) => [`Point (value=${_value})`, { $type: 'Point', _value }, expected, config]),
+                ...[
+                    ['VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcyBvdmVyIDEzIGxhenkgZG9ncy4=', new Uint8Array([
+                        0x54, 0x68, 0x65, 0x20, 0x71, 0x75, 0x69, 0x63, 0x6b, 0x20, 0x62, 0x72, 0x6f,
+                        0x77, 0x6e, 0x20, 0x66, 0x6f, 0x78, 0x20, 0x6a, 0x75, 0x6d, 0x70, 0x73, 0x20,
+                        0x6f, 0x76, 0x65, 0x72, 0x20, 0x31, 0x33, 0x20, 0x6c, 0x61, 0x7a, 0x79, 0x20,
+                        0x64, 0x6f, 0x67, 0x73, 0x2e])],
+                    ['FRIDAY==', new Uint8Array([0x15, 0x12, 0x03, 0x01])],
+                    ['AA==', new Uint8Array([0x00])],
+                    ['', new Uint8Array([])],
+                ].map(([_value, expected]) => [`Base64 (value=${_value})`, { $type: 'Base64', _value }, expected, config]),
+                ...[
+                    [{}, {}],
+                    [{
+                        none: { $type: 'Null', _value: null },
+                        bool: { $type: 'Boolean', _value: false },
+                        integer: { $type: 'Integer', _value: '123' },
+                        float: { $type: 'Float', _value: '-1234' },
+                        string: { $type: 'String', _value: 'Hello, Greg!' },
+                        base64: { $type: 'Base64', _value: 'YGCwFw==' },
+                        list: { $type: 'List', _value: [{ $type: 'String', _value: 'A' }, { $type: 'Integer', _value: '12' }] },
+                        map: { $type: 'Map', _value: { a: { $type: 'String', _value: 'b' }, c: { $type: 'List', _value: [{ $type: 'String', _value: 'd' }] } } },
+                        date: { $type: 'Date', _value: '1988-08-23' },
+                        time: { $type: 'Time', _value: '12:50:35.556000000+01:00' },
+                        localTime: { $type: 'LocalTime', _value: '12:50:35.556000000' },
+                        offsetDateTime: { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
+                        zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                        zonedAndOffsetDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
+                        localDateTime: { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
+                        duration: { $type: 'Duration', _value: 'P0M14DT16S' }
+                    }, {
+                        none: null,
+                        bool: false,
+                        integer: toInt('123'),
+                        float: -1234,
+                        string: 'Hello, Greg!',
+                        base64: new Uint8Array([0x60, 0x60, 0xB0, 0x17]),
+                        list: ['A', toInt('12')],
+                        map: { a: 'b', c: ['d'] },
+                        date: new Date(toInt(1988), toInt(8), toInt(23)),
+                        time: new Time(toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600)),
+                        localTime: new LocalTime(toInt(12), toInt(50), toInt(35), toInt(556000000)),
+                        offsetDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(-3600)),
+                        zonedDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll'),
+                        zonedAndOffsetDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600), 'Antarctica/Troll'),
+                        localDateTime: new LocalDateTime(toInt(2001), toInt(5), toInt(3), toInt(13), toInt(45), toInt(0), toInt(3404004)),
+                        duration: new Duration(toInt(0), toInt(14), toInt(16), toInt(0))
+                    }],
+                ].map(([_value, expected]) => [`Map (value=${_value})`, { $type: 'Map', _value }, expected, config]),
+                ...[
+                    [[], []],
+                    [[
+                        { $type: 'Null', _value: null },
+                        { $type: 'Boolean', _value: false },
+                        { $type: 'Integer', _value: '123' },
+                        { $type: 'Float', _value: '-1234' },
+                        { $type: 'String', _value: 'Hello, Greg!' },
+                        { $type: 'Base64', _value: 'YGCwFw==' },
+                        { $type: 'List', _value: [{ $type: 'String', _value: 'A' }, { $type: 'Integer', _value: '12' }] },
+                        { $type: 'Map', _value: { a: { $type: 'String', _value: 'b' }, c: { $type: 'List', _value: [{ $type: 'String', _value: 'd' }] } } },
+                        { $type: 'Date', _value: '1988-08-23' },
+                        { $type: 'Time', _value: '12:50:35.556000000+01:00' },
+                        { $type: 'LocalTime', _value: '12:50:35.556000000' },
+                        { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
+                        { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                        { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
+                        { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
+                        { $type: 'Duration', _value: 'P0M14DT16S' }
+                    ], [
+                        null,
+                        false,
+                        toInt('123'),
+                        -1234,
+                        'Hello, Greg!',
+                        new Uint8Array([0x60, 0x60, 0xB0, 0x17]),
+                        ['A', toInt('12')],
+                        { a: 'b', c: ['d'] },
+                        new Date(toInt(1988), toInt(8), toInt(23)),
+                        new Time(toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600)),
+                        new LocalTime(toInt(12), toInt(50), toInt(35), toInt(556000000)),
+                        new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(-3600)),
+                        new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll'),
+                        new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600), 'Antarctica/Troll'),
+                        new LocalDateTime(toInt(2001), toInt(5), toInt(3), toInt(13), toInt(45), toInt(0), toInt(3404004)),
+                        new Duration(toInt(0), toInt(14), toInt(16), toInt(0))
+                    ]],
+                ].map(([_value, expected]) => [`List (value=${_value})`, { $type: 'List', _value }, expected, config]),
+                ...[
+                    [
+                        {
+                            _element_id: 'the element id',
+                            _labels: [],
+                            _properties: {}
+                        },
+                        new Node(undefined as any, [], {}, 'the element id')
+                    ], [
+                        {
+                            _element_id: 'the element id',
+                            _labels: ['abcd', 'xvo'],
+                            _properties: {}
+                        },
+                        new Node(undefined as any, ['abcd', 'xvo'], {}, 'the element id')
+                    ],
+                    [
+                        {
+                            _element_id: 'the element id',
+                            _labels: ['abcd', 'xvo'],
+                            _properties: {
+                                none: { $type: 'Null', _value: null },
+                                bool: { $type: 'Boolean', _value: false },
+                                integer: { $type: 'Integer', _value: '123' },
+                                float: { $type: 'Float', _value: '-1234' },
+                                string: { $type: 'String', _value: 'Hello, Greg!' },
+                                base64: { $type: 'Base64', _value: 'YGCwFw==' },
+                                list: { $type: 'List', _value: [{ $type: 'String', _value: 'A' }, { $type: 'Integer', _value: '12' }] },
+                                map: { $type: 'Map', _value: { a: { $type: 'String', _value: 'b' }, c: { $type: 'List', _value: [{ $type: 'String', _value: 'd' }] } } },
+                                date: { $type: 'Date', _value: '1988-08-23' },
+                                time: { $type: 'Time', _value: '12:50:35.556000000+01:00' },
+                                localTime: { $type: 'LocalTime', _value: '12:50:35.556000000' },
+                                offsetDateTime: { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
+                                zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                                zonedAndOffsetDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
+                                localDateTime: { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
+                                duration: { $type: 'Duration', _value: 'P0M14DT16S' }
+                            }
+                        },
+                        new Node(undefined as any, ['abcd', 'xvo'], {
+                            none: null,
+                            bool: false,
+                            integer: toInt('123'),
+                            float: -1234,
+                            string: 'Hello, Greg!',
+                            base64: new Uint8Array([0x60, 0x60, 0xB0, 0x17]),
+                            list: ['A', toInt('12')],
+                            map: { a: 'b', c: ['d'] },
+                            date: new Date(toInt(1988), toInt(8), toInt(23)),
+                            time: new Time(toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600)),
+                            localTime: new LocalTime(toInt(12), toInt(50), toInt(35), toInt(556000000)),
+                            offsetDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(-3600)),
+                            zonedDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll'),
+                            zonedAndOffsetDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600), 'Antarctica/Troll'),
+                            localDateTime: new LocalDateTime(toInt(2001), toInt(5), toInt(3), toInt(13), toInt(45), toInt(0), toInt(3404004)),
+                            duration: new Duration(toInt(0), toInt(14), toInt(16), toInt(0))
+                        }, 'the element id')
+                    ],
+                ].map(([_value, expected]) => [`Node (value=${_value})`, { $type: 'Node', _value }, expected, config]),
+                ...[
+                    [
+                        {
+                            _element_id: 'the element id',
+                            _start_node_element_id: 'the start node element id',
+                            _end_node_element_id: 'the end node element id',
+                            _type: 'mitt type',
+                        },
+                        new Relationship(undefined as any, undefined as any, undefined as any,
+                            'mitt type', {}, 'the element id', 'the start node element id',
+                            'the end node element id')
+                    ], [
+                        {
+                            _element_id: 'the element id',
+                            _start_node_element_id: 'the start node element id',
+                            _end_node_element_id: 'the end node element id',
+                            _type: 'mitt type',
+                            _properties: {}
+                        },
+                        new Relationship(undefined as any, undefined as any, undefined as any,
+                            'mitt type', {}, 'the element id', 'the start node element id',
+                            'the end node element id')
+                    ],
+                    [
+                        {
+                            _element_id: 'the element id',
+                            _start_node_element_id: 'the start node element id',
+                            _end_node_element_id: 'the end node element id',
+                            _type: 'mitt type',
+                            _properties: {
+                                none: { $type: 'Null', _value: null },
+                                bool: { $type: 'Boolean', _value: false },
+                                integer: { $type: 'Integer', _value: '123' },
+                                float: { $type: 'Float', _value: '-1234' },
+                                string: { $type: 'String', _value: 'Hello, Greg!' },
+                                base64: { $type: 'Base64', _value: 'YGCwFw==' },
+                                list: { $type: 'List', _value: [{ $type: 'String', _value: 'A' }, { $type: 'Integer', _value: '12' }] },
+                                map: { $type: 'Map', _value: { a: { $type: 'String', _value: 'b' }, c: { $type: 'List', _value: [{ $type: 'String', _value: 'd' }] } } },
+                                date: { $type: 'Date', _value: '1988-08-23' },
+                                time: { $type: 'Time', _value: '12:50:35.556000000+01:00' },
+                                localTime: { $type: 'LocalTime', _value: '12:50:35.556000000' },
+                                offsetDateTime: { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
+                                zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                                zonedAndOffsetDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
+                                localDateTime: { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
+                                duration: { $type: 'Duration', _value: 'P0M14DT16S' }
+                            }
+                        },
+                        new Relationship(undefined as any, undefined as any, undefined as any, 'mitt type', {
+                            none: null,
+                            bool: false,
+                            integer: toInt('123'),
+                            float: -1234,
+                            string: 'Hello, Greg!',
+                            base64: new Uint8Array([0x60, 0x60, 0xB0, 0x17]),
+                            list: ['A', toInt('12')],
+                            map: { a: 'b', c: ['d'] },
+                            date: new Date(toInt(1988), toInt(8), toInt(23)),
+                            time: new Time(toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600)),
+                            localTime: new LocalTime(toInt(12), toInt(50), toInt(35), toInt(556000000)),
+                            offsetDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(-3600)),
+                            zonedDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll'),
+                            zonedAndOffsetDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600), 'Antarctica/Troll'),
+                            localDateTime: new LocalDateTime(toInt(2001), toInt(5), toInt(3), toInt(13), toInt(45), toInt(0), toInt(3404004)),
+                            duration: new Duration(toInt(0), toInt(14), toInt(16), toInt(0))
+                        }, 'the element id', 'the start node element id', 'the end node element id')
+                    ],
+                ].map(([_value, expected]) => [`Relationship (value=${_value})`, { $type: 'Relationship', _value }, expected, config]),
+                ...[
+                    [
+                        [
+
+                            {
+                                $type: 'Node',
+                                _value: {
+                                    _element_id: 'node 1 element id',
+                                    _labels: ['abcd', 'xvo'],
+                                    _properties: {
+                                        integer: { $type: 'Integer', _value: '123' },
+                                    }
+                                }
+                            }, {
+                                $type: 'Relationship',
+                                _value: {
+                                    _element_id: 'rel 1 element id',
+                                    _start_node_element_id: 'node 1 element id',
+                                    _end_node_element_id: 'node n element id',
+                                    _type: 'mitt type',
+                                    _properties: {
+                                        integer: { $type: 'Integer', _value: '1' },
+                                    }
+                                }
+                            }, {
+                                $type: 'Node',
+                                _value: {
+                                    _element_id: 'node n element id',
+                                    _labels: ['yeap'],
+                                    _properties: {
+                                        integer: { $type: 'Integer', _value: '212' },
+                                    }
+                                }
+                            },
+                        ],
+                        new Path(
+                            new Node(undefined as any, ['abcd', 'xvo'], { integer: toInt(123) }, 'node 1 element id'),
+                            new Node(undefined as any, ['yeap'], { integer: toInt(212) }, 'node n element id'),
+                            [new PathSegment(
+                                new Node(undefined as any, ['abcd', 'xvo'], { integer: toInt(123) }, 'node 1 element id'),
+                                new Relationship(undefined as any, undefined as any, undefined as any, 'mitt type',
+                                    { integer: toInt(1) }, 'rel 1 element id', 'node 1 element id', 'node n element id'),
+                                new Node(undefined as any, ['yeap'], { integer: toInt(212) }, 'node n element id')
+                            )]
+                        )
+                    ],
+                    [
+                        [
+
+                            {
+                                $type: 'Node',
+                                _value: {
+                                    _element_id: 'node 1 element id',
+                                    _labels: ['abcd', 'xvo'],
+                                    _properties: {
+                                        integer: { $type: 'Integer', _value: '123' },
+                                    }
+                                }
+                            }, {
+                                $type: 'Relationship',
+                                _value: {
+                                    _element_id: 'rel 1 element id',
+                                    _start_node_element_id: 'node 1 element id',
+                                    _end_node_element_id: 'node 2 element id',
+                                    _type: 'mitt type',
+                                    _properties: {
+                                        integer: { $type: 'Integer', _value: '1' },
+                                    }
+                                }
+                            }, {
+                                $type: 'Node',
+                                _value: {
+                                    _element_id: 'node 2 element id',
+                                    _labels: ['abcd', 'xvo'],
+                                    _properties: {
+                                        integer: { $type: 'Integer', _value: '123' },
+                                    }
+                                }
+                            }, {
+                                $type: 'Relationship',
+                                _value: {
+                                    _element_id: 'rel 2 element id',
+                                    _start_node_element_id: 'node 2 element id',
+                                    _end_node_element_id: 'node 3 element id',
+                                    _type: 'mitt type',
+                                    _properties: {
+                                        integer: { $type: 'Integer', _value: '1' },
+                                    }
+                                }
+                            }, {
+                                $type: 'Node',
+                                _value: {
+                                    _element_id: 'node 3 element id',
+                                    _labels: ['abcd', 'xvo'],
+                                    _properties: {
+                                        integer: { $type: 'Integer', _value: '123' },
+                                    }
+                                }
+                            }, {
+                                $type: 'Relationship',
+                                _value: {
+                                    _element_id: 'rel 3 element id',
+                                    _start_node_element_id: 'node 3 element id',
+                                    _end_node_element_id: 'node n element id',
+                                    _type: 'mitt type',
+                                    _properties: {
+                                        integer: { $type: 'Integer', _value: '1' },
+                                    }
+                                }
+                            }, {
+                                $type: 'Node',
+                                _value: {
+                                    _element_id: 'node n element id',
+                                    _labels: ['yeap'],
+                                    _properties: {
+                                        integer: { $type: 'Integer', _value: '212' },
+                                    }
+                                }
+                            },
+                        ],
+                        new Path(
+                            new Node(undefined as any, ['abcd', 'xvo'], { integer: toInt(123) }, 'node 1 element id'),
+                            new Node(undefined as any, ['yeap'], { integer: toInt(212) }, 'node n element id'),
+                            [new PathSegment(
+                                new Node(undefined as any, ['abcd', 'xvo'], { integer: toInt(123) }, 'node 1 element id'),
+                                new Relationship(undefined as any, undefined as any, undefined as any, 'mitt type',
+                                    { integer: toInt(1) }, 'rel 1 element id', 'node 1 element id', 'node 2 element id'),
+                                new Node(undefined as any, ['abcd', 'xvo'], { integer: toInt(123) }, 'node 2 element id')
+                            ),
+                            new PathSegment(
+                                new Node(undefined as any, ['abcd', 'xvo'], { integer: toInt(123) }, 'node 2 element id'),
+                                new Relationship(undefined as any, undefined as any, undefined as any, 'mitt type',
+                                    { integer: toInt(1) }, 'rel 2 element id', 'node 2 element id', 'node 3 element id'),
+                                new Node(undefined as any, ['abcd', 'xvo'], { integer: toInt(123) }, 'node 3 element id')
+                            ),
+                            new PathSegment(
+                                new Node(undefined as any, ['abcd', 'xvo'], { integer: toInt(123) }, 'node 3 element id'),
+                                new Relationship(undefined as any, undefined as any, undefined as any, 'mitt type',
+                                    { integer: toInt(1) }, 'rel 3 element id', 'node 3 element id', 'node n element id'),
+                                new Node(undefined as any, ['yeap'], { integer: toInt(212) }, 'node n element id')
+                            )]
+                        )
+                    ]
+                ].map(([_value, expected]) => [`Path (value=${_value})`, { $type: 'Path', _value }, expected, config]),
+            ])
+        ])('should handle profile arguments from type %s', (_: string, argument: any, expected: any, config?: Partial<types.InternalConfig>) => {
+            const codec = subject({
+                rawQueryResponse: {
+                    ...DEFAULT_RAW_RESPONSE,
+                    profiledQueryPlan: {
+                        dbHits: 123,
+                        records: 223,
+                        hasPageCacheStats: false,
+                        pageCacheHits: 2345,
+                        pageCacheMisses: 328278,
+                        pageCacheHitRatio: 32233,
+                        time: 1234,
+                        operatorType: 'write',
+                        identifiers: ['a', 'b'],
+                        arguments: {
+                            'my arg': argument
+                        },
+                        children: [{
+                            dbHits: 123,
+                            records: 223,
+                            hasPageCacheStats: false,
+                            pageCacheHits: 2345,
+                            pageCacheMisses: 328278,
+                            pageCacheHitRatio: 32233,
+                            time: 1234,
+                            operatorType: 'write',
+                            identifiers: ['a', 'b'],
+                            arguments: {
+                                'the other arg': argument
+                            },
+                            children: []
+                        }]
+                    }
+                },
+                config
+            })
+
+            //@ts-expect-error
+            expect(codec.meta.profile.args).toEqual({
+                'my arg': expected
+            })
+
+            //@ts-expect-error
+            expect(codec.meta.profile.children[0].args).toEqual({
+                'the other arg': expected
+            })
+        })
+
         it.each(
             errorConditionsFixture()
         )('should handle %s failures', (_: string, param: SubjectParams) => {
@@ -529,6 +1059,136 @@ describe('QueryResponseCodec', () => {
             param?.contentType ?? DEFAULT_CONTENT_TYPE,
             param?.rawQueryResponse ?? DEFAULT_RAW_RESPONSE
         )
+    }
+
+    function useCustomIntegerConfigFixture(): (Partial<types.InternalConfig> | undefined)[] {
+        return [undefined, {}, { disableLosslessIntegers: false }]
+    }
+
+    function useLossyIntegerConfigFixture() {
+        return [{ disableLosslessIntegers: true }, { useBigInt: false, disableLosslessIntegers: true }];
+    }
+
+    function useBigIntConfigFixture() {
+        return [{ useBigInt: true }, { useBigInt: true, disableLosslessIntegers: true }, { useBigInt: true, disableLosslessIntegers: false }];
+    }
+
+    function useChildrenFixture() {
+        return [
+            { children: [], expectedChildren: [] },
+            {
+                children: [{
+                    dbHits: 123,
+                    records: 101818,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 233,
+                    time: 1234,
+                    operatorType: 'read',
+                    identifiers: ['a'],
+                }], expectedChildren: [{
+                    dbHits: 123,
+                    rows: 101818,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 233,
+                    time: 1234,
+                    operatorType: 'read',
+                    identifiers: ['a']
+                }]
+            },
+            {
+                children: [{
+                    dbHits: 123,
+                    records: 101818,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 233,
+                    time: 1234,
+                    operatorType: 'read',
+                    identifiers: ['a'],
+                },
+                {
+                    dbHits: 123,
+                    records: 223,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 32233,
+                    time: 1234,
+                    operatorType: 'write',
+                    identifiers: ['a', 'b'],
+                }], expectedChildren: [{
+                    dbHits: 123,
+                    rows: 101818,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 233,
+                    time: 1234,
+                    operatorType: 'read',
+                    identifiers: ['a']
+                }, {
+                    dbHits: 123,
+                    rows: 223,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 32233,
+                    time: 1234,
+                    operatorType: 'write',
+                    identifiers: ['a', 'b']
+                }]
+            },
+            {
+                children: [{
+                    dbHits: 123,
+                    records: 101818,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 233,
+                    time: 1234,
+                    operatorType: 'read',
+                    identifiers: ['a'],
+                    children: [{
+                        dbHits: 123,
+                        records: 223,
+                        hasPageCacheStats: false,
+                        pageCacheHits: 2345,
+                        pageCacheMisses: 328278,
+                        pageCacheHitRatio: 32233,
+                        time: 1234,
+                        operatorType: 'write',
+                        identifiers: ['a', 'b'],
+                    }]
+                }], expectedChildren: [{
+                    dbHits: 123,
+                    rows: 101818,
+                    hasPageCacheStats: false,
+                    pageCacheHits: 2345,
+                    pageCacheMisses: 328278,
+                    pageCacheHitRatio: 233,
+                    time: 1234,
+                    operatorType: 'read',
+                    identifiers: ['a'],
+                    children: [{
+                        dbHits: 123,
+                        rows: 223,
+                        hasPageCacheStats: false,
+                        pageCacheHits: 2345,
+                        pageCacheMisses: 328278,
+                        pageCacheHitRatio: 32233,
+                        time: 1234,
+                        operatorType: 'write',
+                        identifiers: ['a', 'b']
+                    }]
+                }]
+            }
+        ]
     }
 
     function errorConditionsFixture(): [string, SubjectParams][] {
