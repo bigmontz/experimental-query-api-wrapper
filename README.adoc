@@ -9,6 +9,7 @@ Experimental wrapper library to access Neo4j Query API using a neo4j-driver-like
 Requirements:
 ```
 Node >= 18
+Neo4j >= 5.23
 ```
 
 Installation:
