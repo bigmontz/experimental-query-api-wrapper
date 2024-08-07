@@ -159,8 +159,6 @@ describe('QueryRequestCodec', () => {
             ['Time', v(new Time(12, 50, 35, 556000000, 3600), { $type: 'Time', _value: '12:50:35.556000000+01:00' })],
             ['LocalTime', v(new LocalTime(12, 50, 35, 556000000), { $type: 'LocalTime', _value: '12:50:35.556000000' })],
             ['OffsetDateTime', v(new DateTime(1988, 8, 23, 12, 50, 35, 556000000, -3600), { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' })],
-            // TODO: FIX
-            // ['ZonedDateTime', v(new DateTime(1988, 8, 23, 12, 50, 35, 556000000, undefined, 'Antarctica/Troll'), { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' })],
             ['ZonedAndOffsetDateTime', v(new DateTime(1988, 8, 23, 12, 50, 35, 556000000, 3600, 'Antarctica/Troll'), { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' })],
             ['LocalDateTime', v(new LocalDateTime(2001, 5, 3, 13, 45, 0, 3404004), { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' })],
             ['Duration', v(new Duration(0, 14, 16, 0), { $type: 'Duration', _value: 'P0M14DT16S' })],
@@ -181,6 +179,19 @@ describe('QueryRequestCodec', () => {
                     param: expected
                 }
             })
+        })
+
+        it('should support DateTime without offset', () => {
+            const param = new DateTime(2024, 3, 31, 2, 30, 0, 0, undefined, 'Europe/Stockholm')
+            const codec = subject({
+                parameters: {
+                    param
+                }
+            })
+
+            expect(() => codec.body).toThrow('DateTime objects without "timeZoneOffsetSeconds" property ' +
+                'are prone to bugs related to ambiguous times. For instance, ' +
+                '2022-10-30T2:30:00[Europe/Berlin] could be GMT+1 or GMT+2.')
         })
 
         it.each([
