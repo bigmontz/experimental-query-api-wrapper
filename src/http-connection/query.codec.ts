@@ -739,6 +739,14 @@ export class QueryRequestCodec {
         } else if (isLocalDateTime(value)) {
             return { $type: 'LocalDateTime', _value: value.toString() }
         } else if (isDateTime(value)) {
+            if (value.timeZoneOffsetSeconds == null) {
+                throw new Error(
+                    'DateTime objects without "timeZoneOffsetSeconds" property ' +
+                    'are prune to bugs related to ambiguous times. For instance, ' +
+                    '2022-10-30T2:30:00[Europe/Berlin] could be GMT+1 or GMT+2.'
+                )
+            }
+            
             if (value.timeZoneId != null) {
                 return { $type: 'ZonedDateTime', _value: value.toString() }
             }

@@ -159,8 +159,6 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     ['Date', v(new Date(int(1999), int(6), int(12)))],
     ['LocalDateTime', v(new LocalDateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234)))],
     ['DateTime Offset and Zone', v(new DateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234), int(7200), 'Europe/Berlin'))],
-    // TODO: FIX
-    // ['DateTime Zone', v(new DateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234), undefined, 'Europe/Berlin'))],
     ['DateTime Offset', v(new DateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234), int(7200)))],
     
     // Combinations
@@ -172,6 +170,18 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
       const { records: [first] } = await session.run('RETURN $input as output',  { input })
       expect(first.get('output')).toEqual(expectedOutput) 
     } 
+  })
+
+  it ('should not support DateTime without offset', async () => {
+    for await (const session of withSession({ database: config.database })) {
+      const dt = new DateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234), undefined, 'Europe/Berlin')
+
+      await expect(session.run(`RETURN $dt`, { dt })).rejects.toEqual(new Error(
+        'DateTime objects without "timeZoneOffsetSeconds" property ' +
+                'are prune to bugs related to ambiguous times. For instance, ' +
+                '2022-10-30T2:30:00[Europe/Berlin] could be GMT+1 or GMT+2.'
+      ))
+    }
   })
 
   it.each([
