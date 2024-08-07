@@ -178,7 +178,7 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
 
       await expect(session.run(`RETURN $dt`, { dt })).rejects.toEqual(new Error(
         'DateTime objects without "timeZoneOffsetSeconds" property ' +
-                'are prune to bugs related to ambiguous times. For instance, ' +
+                'are prone to bugs related to ambiguous times. For instance, ' +
                 '2022-10-30T2:30:00[Europe/Berlin] could be GMT+1 or GMT+2.'
       ))
     }

@@ -190,7 +190,7 @@ describe('QueryRequestCodec', () => {
             })
 
             expect(() => codec.body).toThrow('DateTime objects without "timeZoneOffsetSeconds" property ' +
-                'are prune to bugs related to ambiguous times. For instance, ' +
+                'are prone to bugs related to ambiguous times. For instance, ' +
                 '2022-10-30T2:30:00[Europe/Berlin] could be GMT+1 or GMT+2.')
         })
 
