@@ -335,27 +335,35 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
 
   it('should be able to return notifications', async () => {
     for await (const session of withSession({ database: config.database })) {
-      const summary = await session.run('EXPLAIN MATCH (a:THIS_IS_NOT_A_LABEL) RETURN count(*)').summary()
+      const { summary} = await session.run('MATCH (a: NonExistentLabel) USING INDEX a:NonExistentLabel(id) WHERE a.id = 1 RETURN a')
 
-      expect(summary.notifications.length).toBe(1)
+      expect(summary.notifications.length).toBe(3)
 
-      const [notification] = summary.notifications
-      expect(notification.code).toEqual('Neo.ClientNotification.Statement.UnknownLabelWarning')
-      expect(notification.title).toEqual('The provided label is not in the database.')
-      
-      expect(notification.description).toEqual('One of the labels in your query is not available in the database, ' + 
-                'make sure you didn\'t misspell it or that the label is available when you run this statement ' + 
-                'in your application (the missing label name is: THIS_IS_NOT_A_LABEL)')
-      expect(notification.severityLevel).toEqual('WARNING')
-      // WE NEED TO FIX THIS, CATEGORY IS NOT BEING RETURNED
-      expect(notification.category).toEqual('UNKNOWN')
-      expect(notification.position).not.toEqual({})
-      // @ts-expect-error
-      expect(notification.position.offset).toEqual(17)
-      // @ts-expect-error
-      expect(notification.position.line).toEqual(1)
-      // @ts-expect-error
-      expect(notification.position.column).toEqual(18)
+      expect(summary.notifications[0].title).toEqual('The provided label is not in the database.')
+      expect(summary.notifications[0].code).toEqual('Neo.ClientNotification.Statement.UnknownLabelWarning')
+      expect(summary.notifications[0].description).toEqual('One of the labels in your query is not available in the database, '+
+            'make sure you didn\'t misspell it or that the label is available when you run this statement in your application ' + 
+            '(the missing label name is: NonExistentLabel)')
+      expect(summary.notifications[0].severityLevel).toEqual('WARNING')
+      expect(summary.notifications[0].rawCategory).toEqual('UNRECOGNIZED')
+      expect(summary.notifications[0].position).toEqual({ line: 1, offset: 10, column: 11 })
+
+      expect(summary.notifications[1].title).toEqual('The provided property key is not in the database')
+      expect(summary.notifications[1].code).toEqual('Neo.ClientNotification.Statement.UnknownPropertyKeyWarning')
+      expect(summary.notifications[1].description).toEqual('One of the property names in your query is not available in ' + 
+            'the database, make sure you didn\'t misspell it or that the label is available when you run this statement in ' + 
+            'your application (the missing property name is: id)')
+      expect(summary.notifications[1].severityLevel).toEqual('WARNING')
+      expect(summary.notifications[1].rawCategory).toEqual('UNRECOGNIZED')
+      expect(summary.notifications[1].position).toEqual({ line: 1, offset: 71, column: 72 })
+
+      expect(summary.notifications[2].title).toEqual('The request (directly or indirectly) referred to an index that does not exist.')
+      expect(summary.notifications[2].code).toEqual('Neo.ClientNotification.Schema.HintedIndexNotFound')
+      expect(summary.notifications[2].description).toEqual('The hinted index does not exist, please check the schema ' +
+            '(index is: INDEX FOR (`a`:`NonExistentLabel`) ON (`a`.`id`))')
+      expect(summary.notifications[2].severityLevel).toEqual('WARNING')
+      expect(summary.notifications[2].rawCategory).toEqual('HINT')
+      expect(summary.notifications[2].position).toEqual({ })
     }
   })
 
