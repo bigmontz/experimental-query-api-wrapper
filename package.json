@@ -1,6 +1,6 @@
 {
   "name": "@neo4j-labs/experimental-query-api-wrapper",
-  "version": "0.0.1-alpha01",
+  "version": "0.0.1-alpha02",
   "description": "Experimental wrapper library to access Neo4j Database using Query API with a neo4j-driver-like interface.",
   "main": "lib/index.js",
   "types": "types/index.d.ts",
