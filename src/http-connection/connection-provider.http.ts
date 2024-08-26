@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 import { ConnectionProvider, internal, AuthTokenManager, Connection, Releasable, types, ServerInfo } from "neo4j-driver-core"
+// @ts-ignore
+import Pool, { PoolConfig } from 'neo4j-driver-bolt-connection/lib/pool/index'
 import HttpConnection, { HttpScheme } from "./connection.http"
 
 export interface HttpConnectionProviderConfig {
@@ -27,6 +29,8 @@ export interface HttpConnectionProviderConfig {
     [rec: string]: any
 }
 
+type AcquisitionContext = { auth: types.AuthToken }
+
 export default class HttpConnectionProvider extends ConnectionProvider {
     private _id: number
     private _log: internal.logger.Logger
@@ -38,6 +42,9 @@ export default class HttpConnectionProvider extends ConnectionProvider {
     private _discoveryPromise?: Promise<{
         query: string
     }>
+    private _openConnections: { [n: number]: HttpConnection}
+    private _pool: Pool
+    
 
 
     constructor(config: HttpConnectionProviderConfig) {
@@ -48,6 +55,14 @@ export default class HttpConnectionProvider extends ConnectionProvider {
         this._scheme = config.scheme
         this._authTokenManager = config.authTokenManager
         this._config = config.config
+        this._openConnections = {}
+        this._pool = new Pool({
+            create: this._createConnection.bind(this),
+            destroy: this._destroyConnection.bind(this),
+            validateOnAcquire: this._validateConnectionOnAcquire.bind(this),
+            config: PoolConfig.fromDriverConfig(config.config),
+            log: this._log
+        })
     }
 
     async acquireConnection(param?: { accessMode?: string | undefined; database?: string | undefined; bookmarks: internal.bookmarks.Bookmarks; impersonatedUser?: string | undefined; onDatabaseNameResolved?: ((databaseName?: string | undefined) => void) | undefined; auth?: types.AuthToken | undefined } | undefined): Promise<Connection & Releasable> {
@@ -59,18 +74,42 @@ export default class HttpConnectionProvider extends ConnectionProvider {
             const discoveryResult = await this._discoveryPromise
             this._queryEndpoint = discoveryResult.query
         }
-        
-        const auth = param?.auth ?? await this._authTokenManager.getToken()
-        
-        return new HttpConnection({ 
-            release: async () => {}, 
-            auth, 
+
+        return await this._pool.acquire({ auth: param?.auth }, this._address)
+    }
+
+
+    async verifyConnectivityAndGetServerInfo(param?: { database?: string | undefined; accessMode?: string | undefined } | undefined): Promise<ServerInfo> {
+        const discoveryInfo = await HttpConnection.discover({ scheme: this._scheme, address: this._address })
+
+        return new ServerInfo({
             address: this._address,
-            queryEndpoint: this._queryEndpoint, 
-            config: this._config, 
+            version: discoveryInfo.version
+        }, parseFloat(discoveryInfo.version))
+    }
+
+    async close(): Promise<void> {
+        await this._pool.close()
+
+        await Promise.all(Object.values(this._openConnections).map(c => c.close()))
+    }
+
+    private async _createConnection(
+        context: AcquisitionContext,
+        address: internal.serverAddress.ServerAddress,
+        release: (address: internal.serverAddress.ServerAddress, connection: HttpConnection) => Promise<void>): Promise<HttpConnection> {
+
+        const auth = context.auth ?? await this._authTokenManager.getToken()
+
+        const connection: HttpConnection = new HttpConnection({
+            release: async () => await release(address, connection),
+            auth,
+            address,
+            queryEndpoint: this._queryEndpoint!,
+            config: this._config,
             logger: this._log,
             errorHandler: (error: Error & { code: string, retriable: boolean }): Error => {
-                if (error == null || typeof error.code !== 'string' || !error.code.startsWith('Neo.ClientError.Security.') || param?.auth != null  ) {
+                if (error == null || typeof error.code !== 'string' || !error.code.startsWith('Neo.ClientError.Security.') || context?.auth != null) {
                     return error
                 }
                 const handled = this._authTokenManager.handleSecurityException(auth, error.code as unknown as `Neo.ClientError.Security.${string}`)
@@ -79,21 +118,28 @@ export default class HttpConnectionProvider extends ConnectionProvider {
                 }
 
                 return error
-            }  
-        }) 
+            }
+        })
+
+        this._openConnections[connection.id] = connection
+
+        return connection
     }
 
-
-    async verifyConnectivityAndGetServerInfo(param?: { database?: string | undefined; accessMode?: string | undefined } | undefined): Promise<ServerInfo> {
-        const discoveryInfo = await HttpConnection.discover({ scheme: this._scheme, address: this._address })
-        
-        return new ServerInfo({
-            address: this._address,
-            version: discoveryInfo.version
-        }, parseFloat(discoveryInfo.version))
+    private async _validateConnectionOnAcquire(context: AcquisitionContext, conn: HttpConnection): Promise<boolean> {
+        try {
+            conn.auth = context.auth ?? await this._authTokenManager.getToken()
+            return true
+        } catch (error) {
+            this._log.debug(
+                `The connection ${conn.id} is not valid because of an error ${error.code} '${error.message}'`
+            )
+            return false
+        }
     }
-    
-    async close(): Promise<void> {
-        
+
+    private async _destroyConnection (conn: HttpConnection): Promise<void> {
+        delete this._openConnections[conn.id]
+        return await conn.close()
     }
 }

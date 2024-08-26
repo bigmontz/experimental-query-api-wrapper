@@ -169,6 +169,14 @@ export default class HttpConnection extends Connection {
             })
     }
 
+    get id (): number {
+        return this._id
+    }
+
+    set auth(auth: types.AuthToken) {
+        this._auth = auth
+    }
+
     getProtocolVersion(): number {
         return 0
     }
@@ -187,6 +195,10 @@ export default class HttpConnection extends Connection {
 
     release(): Promise<void> {
         return this._release()
+    }
+
+    async close(): Promise<void> {
+        this._abortController?.abort(newError('Aborted since connection is being closed.'))
     }
 
     toString() {
