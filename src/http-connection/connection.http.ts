@@ -45,6 +45,7 @@ export default class HttpConnection extends Connection {
     private _log?: internal.logger.Logger
     private _id: number
     private _errorHandler: (error: Error & { code: string, retriable: boolean }) => Error
+    private _open: boolean
 
     constructor(config: HttpConnectionConfig) {
         super()
@@ -55,6 +56,7 @@ export default class HttpConnection extends Connection {
         this._config = config.config
         this._log = config.logger
         this._errorHandler = config.errorHandler
+        this._open = true
     }
 
     run(query: string, parameters?: Record<string, unknown> | undefined, config?: RunQueryConfig | undefined): internal.observer.ResultStreamObserver {
@@ -177,12 +179,16 @@ export default class HttpConnection extends Connection {
         this._auth = auth
     }
 
+    get auth(): types.AuthToken {
+        return this._auth
+    }
+
     getProtocolVersion(): number {
         return 0
     }
 
     isOpen(): boolean {
-        return true
+        return this._open
     }
 
     hasOngoingObservableRequests(): boolean {
@@ -199,6 +205,7 @@ export default class HttpConnection extends Connection {
 
     async close(): Promise<void> {
         this._abortController?.abort(newError('Aborted since connection is being closed.'))
+        this._open = false
     }
 
     toString() {
