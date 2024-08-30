@@ -15,11 +15,16 @@
  * limitations under the License.
  */
 import { ConnectionProvider, internal, AuthTokenManager, Connection, Releasable, types, ServerInfo } from "neo4j-driver-core"
-// @ts-ignore
-import Pool, { PoolConfig } from 'neo4j-driver-bolt-connection/lib/pool/index'
 import HttpConnection, { HttpScheme } from "./connection.http"
 
-export interface HttpConnectionProviderConfig {
+const {
+    pool: { 
+        Pool,
+        PoolConfig,
+    }
+} = internal 
+
+export type HttpConnectionProviderConfig = {
     id: number,
     log: internal.logger.Logger
     address: internal.serverAddress.ServerAddress
@@ -30,6 +35,10 @@ export interface HttpConnectionProviderConfig {
 }
 
 type AcquisitionContext = { auth: types.AuthToken }
+
+export type HttpConnectionProviderInjectable = {
+    newPool: (...params: ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>) => internal.pool.Pool<HttpConnection>
+}
 
 export default class HttpConnectionProvider extends ConnectionProvider {
     private _id: number
@@ -43,11 +52,11 @@ export default class HttpConnectionProvider extends ConnectionProvider {
         query: string
     }>
     private _openConnections: { [n: number]: HttpConnection}
-    private _pool: Pool
+    private _pool: internal.pool.Pool<HttpConnection>
     
-
-
-    constructor(config: HttpConnectionProviderConfig) {
+    constructor(config: HttpConnectionProviderConfig, { newPool }: HttpConnectionProviderInjectable = {
+        newPool: (...params) => new Pool<HttpConnection>(...params) 
+    }) {
         super()
         this._id = config.id
         this._log = config.log
@@ -56,7 +65,7 @@ export default class HttpConnectionProvider extends ConnectionProvider {
         this._authTokenManager = config.authTokenManager
         this._config = config.config
         this._openConnections = {}
-        this._pool = new Pool({
+        this._pool = newPool({
             create: this._createConnection.bind(this),
             destroy: this._destroyConnection.bind(this),
             validateOnAcquire: this._validateConnectionOnAcquire.bind(this),

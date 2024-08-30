@@ -42,8 +42,7 @@
     "typescript": "^4.9.5"
   },
   "dependencies": {
-    "neo4j-driver-bolt-connection": "^5.23.0",
-    "neo4j-driver-core": "5.23.0"
+    "neo4j-driver-core": "5.24.0"
   },
   "engines": {
     "node": ">=18.0.0"
