@@ -188,9 +188,12 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
     }
 
     *stream(): Generator<any[]> {
-        for (const value of this._response.data.values) {
-            yield value.map(this._decodeValue.bind(this))
-        }
+        while (this._response.data.values.length > 0) {
+            const value =  this._response.data.values.shift()
+            if (value != null) {
+                yield value.map(this._decodeValue.bind(this))
+            }
+        } 
         return
     }
 
