@@ -64,7 +64,7 @@ describe('ResultStreamObserver', () => {
             expect(queuedRecords[3].toObject()).toEqual({ A: 1, B: 2, C: 3 })
         })
 
-        it('passes queued records to a new subscriber', () => {
+        it('should pass queued records to a new subscriber', () => {
             const streamObserver = subject()
             const receivedRecords: Record[] = []
             const resultObserver = observer({
@@ -82,6 +82,30 @@ describe('ResultStreamObserver', () => {
             expect(receivedRecords[0].toObject()).toEqual({ A: 1, B: 2, C: 3 })
             expect(receivedRecords[1].toObject()).toEqual({ A: 11, B: 22, C: 33 })
             expect(receivedRecords[2].toObject()).toEqual({ A: 111, B: 222, C: 333 })
+        })
+
+        it('should clear buffered after redirects to the observer', () => {
+            const streamObserver = subject()
+            const receivedRecords: Record[] = []
+            const receivedRecords2: Record[] = []
+            const resultObserver = observer({
+                onNext: record => receivedRecords.push(record)
+            })
+            const resultObserver2 = observer({
+                onNext: record => receivedRecords2.push(record)
+            })
+
+            streamObserver.onKeys(['A', 'B', 'C'])
+            streamObserver.onNext([1, 2, 3])
+            streamObserver.onNext([11, 22, 33])
+            streamObserver.onNext([111, 222, 333])
+
+            streamObserver.subscribe(resultObserver)
+
+            streamObserver.subscribe(resultObserver2)
+
+            expect(receivedRecords.length).toBe(3)
+            expect(receivedRecords2.length).toBe(0)
         })
     })
 

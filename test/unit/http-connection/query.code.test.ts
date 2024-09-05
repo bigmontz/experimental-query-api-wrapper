@@ -1421,6 +1421,9 @@ describe('QueryResponseCodec', () => {
             })
 
             expect([...codec.stream()]).toEqual(expected)
+            // the stream should be consumed,
+            // no data should come after
+            expect([...codec.stream()]).toEqual([])
         })
 
         it.each(

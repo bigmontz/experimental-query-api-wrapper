@@ -99,9 +99,13 @@ export class ResultStreamObserver implements internal.observer.ResultStreamObser
         }
 
         if (this._queuedRecords.length > 0 && observer.onNext) {
-            for (let i = 0; i < this._queuedRecords.length; i++) {
-                observer.onNext(this._queuedRecords[i])
-                if (this._queuedRecords.length - i - 1 <= this._lowRecordWatermark) {
+            while (this._queuedRecords.length > 0) {
+                const record = this._queuedRecords.shift()
+                if (record != null) {
+                    observer.onNext(record)
+                }
+
+                if (this._queuedRecords.length - 1 <= this._lowRecordWatermark) {
                     this.resume()
                 }
             }
