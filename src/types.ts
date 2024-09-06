@@ -26,7 +26,7 @@ type WrapperSession = Pick<Session, 'run' | 'lastBookmarks' | 'close' > & Dispos
 type WrapperSessionConfig = Pick<SessionConfig, 'bookmarks' | 'impersonatedUser' | 'bookmarkManager' | 'defaultAccessMode'> & {
   database: string
 }
-type Wrapper = Pick<Driver, 'close' > & Disposable & VerifyConnectivity & {
+type Wrapper = Pick<Driver, 'close' | 'supportsMultiDb' > & Disposable & VerifyConnectivity & {
   session(config: WrapperSessionConfig): WrapperSession
 } 
 

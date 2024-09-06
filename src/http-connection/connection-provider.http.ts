@@ -97,6 +97,10 @@ export default class HttpConnectionProvider extends ConnectionProvider {
         }, parseFloat(discoveryInfo.version))
     }
 
+    async supportsMultiDb(): Promise<boolean> {
+        return true
+    }
+
     async close(): Promise<void> {
         await this._pool.close()
 
