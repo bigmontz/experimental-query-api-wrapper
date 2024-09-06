@@ -30,7 +30,7 @@ type Wrapper = Pick<Driver, 'close' > & Disposable & VerifyConnectivity & {
   session(config: WrapperSessionConfig): WrapperSession
 } 
 
-type WrapperConfig = Pick<Config, 'encrypted' | 'useBigInt' | 'disableLosslessIntegers'>
+type WrapperConfig = Pick<Config, 'encrypted' | 'useBigInt' | 'disableLosslessIntegers' | 'maxConnectionPoolSize' | 'connectionAcquisitionTimeout'>
 
 export type {
   HttpUrl,
