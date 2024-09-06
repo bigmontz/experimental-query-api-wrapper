@@ -15,20 +15,15 @@
  * limitations under the License.
  */
 
-import HttpConnectionProvider, { 
-    HttpConnectionProviderInjectable, 
-    HttpConnectionProviderConfig 
-} from '../../../src/http-connection/connection-provider.http'
+import HttpConnectionProvider from '../../../src/http-connection/connection-provider.http'
 
-import { auth, authTokenManagers, internal, newError, staticAuthTokenManager } from "neo4j-driver-core"
+import { auth, internal, newError, staticAuthTokenManager } from "neo4j-driver-core"
 import HttpConnection, { HttpScheme } from '../../../src/http-connection/connection.http'
-import { logging } from '../../../src'
 
 type NewPool = (...params: ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>) => internal.pool.Pool<HttpConnection>
 
 
 describe('HttpConnectionProvider', () => {
-
     describe('pool configuration', () => {
         describe('create', () => {
             it('should create a connection and register in the open connections', async () => {
@@ -275,6 +270,15 @@ describe('HttpConnectionProvider', () => {
 
                 expect(connection.auth).not.toEqual(newAuth)
             })
+        })
+    })
+
+    describe('.supportsMultiDb()', () => {
+        it ('should resolves true', async () => {
+            const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
+            const { provider } = newProvider(address, jest.fn())
+
+            await expect(provider.supportsMultiDb()).resolves.toBe(true)
         })
     })
 })

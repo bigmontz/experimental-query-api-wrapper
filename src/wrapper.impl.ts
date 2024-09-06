@@ -31,6 +31,10 @@ export class WrapperImpl implements Wrapper {
         validateDatabase(config)
         return this.driver.verifyConnectivity(config)
     }
+
+    supportsMultiDb(): Promise<boolean> {
+        return this.driver.supportsMultiDb()
+    }
     
     [Symbol.asyncDispose](): Promise<void> {
         return this.driver.close()
