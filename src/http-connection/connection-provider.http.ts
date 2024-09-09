@@ -139,6 +139,14 @@ export default class HttpConnectionProvider extends ConnectionProvider {
         return true
     }
 
+    async supportsSessionAuth(): Promise<boolean> {
+        return true
+    }
+
+    async supportsUserImpersonation(): Promise<boolean> {
+        return true
+    }
+
     async close(): Promise<void> {
         await this._pool.close()
 
