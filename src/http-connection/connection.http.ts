@@ -95,7 +95,7 @@ export default class HttpConnection extends Connection {
             then(async (res) => {
                 return [res.headers.get('content-type'), (await res.json()) as RawQueryResponse]
             })
-            .catch(this._handleAndReThrown.bind(this))
+            .catch((error) => this._handleAndReThrown(newError(`Failure accessing "${request.url}"`, 'SERVICE_UNAVAILABLE', error)))
             .catch((error) => observer.onError(error))
             .then(async ([contentType, rawQueryResponse]: [string, RawQueryResponse]) => {
                 if (rawQueryResponse == null) {
@@ -181,6 +181,14 @@ export default class HttpConnection extends Connection {
 
     get auth(): types.AuthToken {
         return this._auth
+    }
+
+    set queryEndpoint(queryEndpoint: string) {
+        this._queryEndpoint = queryEndpoint
+    }
+
+    get queryEndpoint(): string {
+        return this._queryEndpoint
     }
 
     getProtocolVersion(): number {
