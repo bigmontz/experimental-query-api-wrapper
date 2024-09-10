@@ -68,6 +68,23 @@ describe('Wrapper', () => {
         promise?.catch(_ => 'Do nothing').finally(() => { })
     })
 
+    it.each([
+        ['Promise.resolve(object)', Promise.resolve({ })],
+        [
+            "Promise.reject(newError('something went wrong on verify conn'))",
+            Promise.reject(newError('something went wrong on verify conn'))
+        ]
+    ])('.verifyConnectivity() => %s', (_, expectedPromise) => {
+        connectionProvider.verifyConnectivityAndGetServerInfo = jest.fn(() => expectedPromise)
+        const config = { database: 'db' }
+
+        const promise: Promise<any> | undefined = wrapper?.verifyConnectivity(config)
+
+        expect(promise).toBe(expectedPromise)
+        expect(connectionProvider.verifyConnectivityAndGetServerInfo).toHaveBeenCalledWith({ ...config, accessMode: 'READ' })
+        promise?.catch(_ => 'Do nothing').finally(() => { })
+    })
+
     function mockCreateConnectionProvider(connectionProvider: ConnectionProvider) {
         return (
             id: number,

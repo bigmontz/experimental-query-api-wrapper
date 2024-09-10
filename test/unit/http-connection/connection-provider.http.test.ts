@@ -15,13 +15,31 @@
  * limitations under the License.
  */
 
-import HttpConnectionProvider from '../../../src/http-connection/connection-provider.http'
+import HttpConnectionProvider, {
+    HttpConnectionProviderInjectable, NewHttpConnection
+} from '../../../src/http-connection/connection-provider.http'
 
 import { auth, internal, newError, staticAuthTokenManager } from "neo4j-driver-core"
 import HttpConnection, { HttpScheme } from '../../../src/http-connection/connection.http'
+import { RunQueryConfig } from "neo4j-driver-core/types/connection"
+import { ResultStreamObserver } from '../../../src/http-connection/stream-observers'
 
-type NewPool = (...params: ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>) => internal.pool.Pool<HttpConnection>
 
+
+const {
+    pool: {
+        Pool
+    }
+} = internal
+
+
+type JestSpiesRun =  jest.SpyInstance<
+    internal.observer.ResultStreamObserver, 
+    [query: string, parameters?: Record<string, unknown> | undefined, config?: RunQueryConfig | undefined], 
+    any
+>
+
+type JestSpiesOnRelease = jest.SpyInstance<Promise<void>, [], any>
 
 describe('HttpConnectionProvider', () => {
     describe('pool configuration', () => {
@@ -29,7 +47,7 @@ describe('HttpConnectionProvider', () => {
             it('should create a connection and register in the open connections', async () => {
                 const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                 const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                const { provider } = newProvider(address, newPool)
+                const { provider } = newProvider(address, { newPool })
 
                 const [[{ create }]] = newPool.mock.calls
 
@@ -46,7 +64,7 @@ describe('HttpConnectionProvider', () => {
             it('should configure release function', async () => {
                 const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                 const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                newProvider(address, newPool)
+                newProvider(address, { newPool })
                 const release = jest.fn(async (address: internal.serverAddress.ServerAddress, connection: HttpConnection) => {})
 
                 const [[{ create }]] = newPool.mock.calls
@@ -64,7 +82,7 @@ describe('HttpConnectionProvider', () => {
             it('should configure context auth when available', async () => {
                 const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                 const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                newProvider(address, newPool)
+                newProvider(address, { newPool })
                 const authToken = auth.basic('local_user', 'local_password')
                 
                 const [[{ create }]] = newPool.mock.calls
@@ -77,7 +95,7 @@ describe('HttpConnectionProvider', () => {
             it('should configure auth token provided by auth manager when no auth in context', async () => {
                 const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                 const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                const { params: { authTokenManager} } = newProvider(address, newPool)
+                const { params: { authTokenManager} } = newProvider(address, { newPool })
                 
                 const [[{ create }]] = newPool.mock.calls
 
@@ -89,23 +107,23 @@ describe('HttpConnectionProvider', () => {
             it('should configure query endpoint', async () => {
                 const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                 const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                const { provider, } = newProvider(address, newPool)
+                const { provider, } = newProvider(address, { newPool })
                 const queryEndpoint = 'myqueryendpoint'
                 // @ts-expect-error
                 provider._queryEndpoint = queryEndpoint
 
                 const [[{ create }]] = newPool.mock.calls
 
-                const connection = await create!({ }, address, async () => {})
+                const connection = await create!({ queryEndpoint }, address, async () => {})
 
                 // @ts-expect-error
                 expect(connection._queryEndpoint).toBe(queryEndpoint)
             })
 
-            it('should configure query endpoint', async () => {
+            it('should set config', async () => {
                 const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                 const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                const { params: { config }} = newProvider(address, newPool)
+                const { params: { config }} = newProvider(address, { newPool })
                 
                 const [[{ create }]] = newPool.mock.calls
 
@@ -118,7 +136,7 @@ describe('HttpConnectionProvider', () => {
             it('should configure logger', async () => {
                 const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                 const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                const { params: { log }} = newProvider(address, newPool)
+                const { params: { log }} = newProvider(address, { newPool })
                 
                 const [[{ create }]] = newPool.mock.calls
 
@@ -137,7 +155,7 @@ describe('HttpConnectionProvider', () => {
                 ])('should return unmodified error when %s', async (error: Error | undefined | null) => {
                     const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                     const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                    const { params: { authTokenManager } } = newProvider(address, newPool)
+                    const { params: { authTokenManager } } = newProvider(address, { newPool })
                     const spyOnHandleSecurityException = jest.spyOn(authTokenManager, 'handleSecurityException')
 
                     const [[{ create }]] = newPool.mock.calls
@@ -159,13 +177,44 @@ describe('HttpConnectionProvider', () => {
                     expect(spyOnHandleSecurityException).not.toHaveBeenCalled()
                 })
 
+                it('should forget _queryEndpoint when SERVICE_UNAVAILABLE', async () => {
+                    const error = newError('some neo4j error', 'SERVICE_UNAVAILABLE')
+                    const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
+                    const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
+                    const { provider, params: { authTokenManager } } = newProvider(address, { newPool })
+                    const spyOnHandleSecurityException = jest.spyOn(authTokenManager, 'handleSecurityException')
+                    // @ts-expect-error
+                    provider._queryEndpoint = 'some endpoint'
+
+                    const [[{ create }]] = newPool.mock.calls
+    
+
+                    const connection = await create!({ }, address, async () => {})
+
+
+                    // @ts-expect-error
+                    const errorHandler = connection._errorHandler
+    
+                    const returnedError = errorHandler(error)
+                    expect(returnedError).toBe(error)
+                    if (error != null && typeof error === 'object') {
+                        // @ts-expect-error
+                        expect(returnedError.retriable).not.toBe(true)
+                    }
+
+                    expect(spyOnHandleSecurityException).not.toHaveBeenCalled()
+
+                    // @ts-expect-error
+                    expect(provider._queryEndpoint).toBe(undefined)  
+                }) 
+
                 it.each([
                     [newError('some retriable error', 'Neo.ClientError.Security.MadeUp'), true],
                     [newError('some retriable error', 'Neo.ClientError.Security.MadeUp'), false]
                 ])('should treated security error %s when as authManager said', async (error: Error, retriable: boolean) => {
                     const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                     const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                    const { params: { authTokenManager } } = newProvider(address, newPool)
+                    const { params: { authTokenManager } } = newProvider(address, { newPool })
                     const spyOnHandleSecurityException = jest.spyOn(authTokenManager, 'handleSecurityException')
                     spyOnHandleSecurityException.mockImplementation(() => retriable)
                     
@@ -190,7 +239,7 @@ describe('HttpConnectionProvider', () => {
             it('should close a connection and de-register in the open connections', async () => {
                 const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                 const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                const { provider } = newProvider(address, newPool)
+                const { provider } = newProvider(address, { newPool })
 
                 const [[{ destroy, create }]] = newPool.mock.calls
 
@@ -211,26 +260,28 @@ describe('HttpConnectionProvider', () => {
             it('should update auth with context auth', async () => {
                 const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                 const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                newProvider(address, newPool)
+                const { provider } = newProvider(address, { newPool })
 
                 const [[{ validateOnAcquire, create }]] = newPool.mock.calls
 
                 expect(typeof create).toBe('function')
-                const connection = await create!({}, address, async () => {})
+                const connection = await create!({ queryEndpoint: 'endpoint 1'}, address, async () => {})
                 expect(connection).toBeInstanceOf(HttpConnection)
+                expect(connection.queryEndpoint).toBe('endpoint 1')
 
                 expect(typeof validateOnAcquire).toBe('function')
 
                 const newAuth = auth.basic('newUser', 'newPassword')
-                expect(await validateOnAcquire!({ auth: newAuth }, connection)).toBe(true)
+                expect(await validateOnAcquire!({ auth: newAuth, queryEndpoint: 'endpoint 2' }, connection)).toBe(true)
 
                 expect(connection.auth).toEqual(newAuth)
+                expect(connection.queryEndpoint).toBe('endpoint 2')
             })
 
             it('should update auth with authManager auth', async () => {
                 const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                 const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                const { params: { authTokenManager } } = newProvider(address, newPool)
+                const { params: { authTokenManager } } = newProvider(address, { newPool })
                 const spyOnGetToken = jest.spyOn(authTokenManager, 'getToken')
                     
 
@@ -252,7 +303,7 @@ describe('HttpConnectionProvider', () => {
             it('should return false if update auth token fail', async () => {
                 const newPool = jest.fn<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>()
                 const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-                const { params: { authTokenManager } } = newProvider(address, newPool)
+                const { params: { authTokenManager } } = newProvider(address, { newPool })
                 const spyOnGetToken = jest.spyOn(authTokenManager, 'getToken')
                     
 
@@ -276,14 +327,208 @@ describe('HttpConnectionProvider', () => {
     describe('.supportsMultiDb()', () => {
         it ('should resolves true', async () => {
             const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
-            const { provider } = newProvider(address, jest.fn())
+            const { provider } = newProvider(address, { newPool: jest.fn() })
 
             await expect(provider.supportsMultiDb()).resolves.toBe(true)
         })
     })
+
+    describe.each(['READ', 'WRITE'].flatMap(mode => [
+        ['neo4j', mode],
+        ['system', mode],
+        ['otherdb', mode]
+    ]))('.verifyConnectivityAndGetServerInfo({ database: "%s", accessMode: "%"})', (database, accessMode) => {
+        const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
+        
+        it('should be able to acquire a new connection and run "RETURN 1" using access mode', async () => {    
+            // Setting up state holders
+            const { newHttpConnection, discoverSpy, spyOnRunners, spyOnRelease } = setupSpies(address)
+
+            // new instances
+            const { provider, params: { scheme} } = newProvider(address, { newHttpConnection })
+            const expectedQueryApi = `${scheme}://${address.asHostPort()}/db/{databaseName}/query/v2`
+            
+            // mocking
+            discoverSpy.mockResolvedValue({
+                query: expectedQueryApi,
+                version: '5.19.0',
+                edition: 'enterprise'
+            })
+
+            // Subject
+            const result = await provider.verifyConnectivityAndGetServerInfo({ database, accessMode })
+
+            // Assert results
+            expect(result.address).toBe(address.asHostPort())
+            expect(result.protocolVersion).toBe(5.19)
+            expect(result.agent).toBe('5.19.0')
+
+            // introspecting
+            expect(newHttpConnection).toHaveBeenCalledTimes(1)
+            expect(newHttpConnection).toHaveBeenCalledWith(expect.objectContaining({
+                queryEndpoint: expectedQueryApi
+            }))
+            expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+                database,
+                mode: accessMode
+            }))
+            expect(spyOnRelease[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRelease[0].mock.invocationCallOrder[0]).toBeGreaterThan(spyOnRunners[0].mock.invocationCallOrder[0])
+        })
+
+        it('should throw when release throws', async () => {
+            const error = new Error('something in the way it crashes')
+            // Setting up state holders
+            const { newHttpConnection, discoverSpy, spyOnRunners, spyOnRelease } = setupSpies(address, { 
+                mockReleaseImplementation: async () => {
+                    throw error
+                }
+            })
+
+            // new instances
+            const { provider, params: { scheme} } = newProvider(address, { newHttpConnection })
+            const expectedQueryApi = `${scheme}://${address.asHostPort()}/db/{databaseName}/query/v2`
+            
+            // mocking
+            discoverSpy.mockResolvedValue({
+                query: expectedQueryApi,
+                version: '5.19.0',
+                edition: 'enterprise'
+            })
+
+            // Subject and assertion
+            await expect(provider.verifyConnectivityAndGetServerInfo({ database, accessMode })).rejects.toBe(error)
+
+            // introspecting
+            expect(newHttpConnection).toHaveBeenCalledTimes(1)
+            expect(newHttpConnection).toHaveBeenCalledWith(expect.objectContaining({
+                queryEndpoint: expectedQueryApi
+            }))
+            expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+                database,
+                mode: accessMode
+            }))
+            expect(spyOnRelease[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRelease[0].mock.invocationCallOrder[0]).toBeGreaterThan(spyOnRunners[0].mock.invocationCallOrder[0])
+        })
+
+        it('should fail if query run fails', async () => {
+            const error = new Error('something in the way it crashes')
+            // Setting up state holders
+            const { newHttpConnection, discoverSpy, spyOnRunners, spyOnRelease } = setupSpies(address, { 
+                mockRunImplementation: () => {
+                    const observer = new ResultStreamObserver({
+                        server: address,
+                        highRecordWatermark: 100,
+                        lowRecordWatermark: 1001
+                    })
+        
+                    observer.onError(error)
+        
+                    return observer
+                }
+            })
+
+            // new instances
+            const { provider, params: { scheme} } = newProvider(address, { newHttpConnection })
+            const expectedQueryApi = `${scheme}://${address.asHostPort()}/db/{databaseName}/query/v2`
+            
+            // mocking
+            discoverSpy.mockResolvedValue({
+                query: expectedQueryApi,
+                version: '5.19.0',
+                edition: 'enterprise'
+            })
+
+            // Subject and assertion
+            await expect(provider.verifyConnectivityAndGetServerInfo({ database, accessMode })).rejects.toBe(error)
+
+            // introspecting
+            expect(newHttpConnection).toHaveBeenCalledTimes(1)
+            expect(newHttpConnection).toHaveBeenCalledWith(expect.objectContaining({
+                queryEndpoint: expectedQueryApi
+            }))
+            expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+                database,
+                mode: accessMode
+            }))
+            expect(spyOnRelease[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRelease[0].mock.invocationCallOrder[0]).toBeGreaterThan(spyOnRunners[0].mock.invocationCallOrder[0])
+        })
+
+        it('should fail if discovery fails', async () => {
+            const error = new Error('something in the way it crashes')
+            // Setting up state holders
+            const { newHttpConnection, discoverSpy, spyOnRunners, spyOnRelease } = setupSpies(address)
+
+            // new instances
+            const { provider, params: { scheme} } = newProvider(address, { newHttpConnection })
+            
+            // mocking
+            discoverSpy.mockRejectedValue(error)
+
+            // Subject and assertion
+            await expect(provider.verifyConnectivityAndGetServerInfo({ database, accessMode })).rejects.toBe(error)
+
+            // introspecting
+            expect(newHttpConnection).toHaveBeenCalledTimes(0)
+            expect(spyOnRunners.length).toBe(0)
+            expect(spyOnRelease.length).toBe(0)
+        })
+    })
 })
 
-function newProvider(address: internal.serverAddress.ServerAddress, newPool: jest.Mock<internal.pool.Pool<HttpConnection>, ConstructorParameters<typeof internal.pool.Pool<HttpConnection>>>) {
+function setupSpies(address: internal.serverAddress.ServerAddress, spies?: {
+    mockRunImplementation?: (() => ResultStreamObserver),
+    mockReleaseImplementation?: () => Promise<void>
+}) {
+    const connections: HttpConnection[] = []
+    const spyOnRunners: JestSpiesRun[] = []
+    const spyOnRelease: JestSpiesOnRelease[] = []
+
+    // mocks and spies
+    const newHttpConnection: NewHttpConnection = jest.fn((...params) => {
+        const connection = new HttpConnection(...params)
+        const run = jest.spyOn(connection, 'run')
+
+        const mockRunImplementation = spies?.mockRunImplementation ?? (() => {
+            const observer = new ResultStreamObserver({
+                server: address,
+                highRecordWatermark: 100,
+                lowRecordWatermark: 1001
+            })
+
+            observer.onKeys(['1'])
+            observer.onNext([1])
+
+            observer.onCompleted({})
+
+            return observer
+        })
+
+        run.mockImplementation(mockRunImplementation)
+
+        const release = jest.spyOn(connection, 'release')
+
+        if (typeof spies?.mockReleaseImplementation === 'function') {
+            release.mockImplementation(spies.mockReleaseImplementation)
+        }
+
+        spyOnRunners.push(run)
+        spyOnRelease.push(release)
+        connections.push(connection)
+
+
+        return connection
+    })
+    const discoverSpy = jest.spyOn(HttpConnection, 'discover')
+    return { newHttpConnection, discoverSpy, spyOnRunners, spyOnRelease }
+}
+
+function newProvider(address: internal.serverAddress.ServerAddress, injectable?: Partial<HttpConnectionProviderInjectable>) {
     const params = {
         address,
         authTokenManager: staticAuthTokenManager({ authToken: auth.basic('neo4j', 'password ') }),
@@ -294,6 +539,8 @@ function newProvider(address: internal.serverAddress.ServerAddress, newPool: jes
     }
     
     return { provider :new HttpConnectionProvider(params, {
-        newPool
+        newPool: (...params) => new Pool<HttpConnection>(...params),
+        newHttpConnection: (...params) => new HttpConnection(...params),
+        ...injectable
     }), params }
 }
