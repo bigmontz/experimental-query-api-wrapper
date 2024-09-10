@@ -23,6 +23,7 @@ import { auth, internal, newError, staticAuthTokenManager } from "neo4j-driver-c
 import HttpConnection, { HttpScheme } from '../../../src/http-connection/connection.http'
 import { RunQueryConfig } from "neo4j-driver-core/types/connection"
 import { ResultStreamObserver } from '../../../src/http-connection/stream-observers'
+import { AuthToken } from '../../../src'
 
 
 
@@ -490,6 +491,216 @@ describe('HttpConnectionProvider', () => {
 
             // Subject and assertion
             await expect(provider.verifyConnectivityAndGetServerInfo({ database, accessMode })).rejects.toBe(error)
+
+            // introspecting
+            expect(newHttpConnection).toHaveBeenCalledTimes(0)
+            expect(spyOnRunners.length).toBe(0)
+            expect(spyOnRelease.length).toBe(0)
+        })
+    })
+
+    describe.each(['READ', 'WRITE'].flatMap(mode => [
+            [mode, auth.basic('session', 'password')],
+            [mode, auth.bearer('the session bearer')],
+            [mode, undefined]
+        ]).flatMap((modeAndAuth) => [
+            ['neo4j', ...modeAndAuth],
+            ['system', ...modeAndAuth],
+            ['otherdb', ...modeAndAuth]
+        ]) as [string, string, AuthToken | undefined][]
+    )('.verifyAuthentication({ database: "%s", accessMode: "%", auth: %o})', (database, accessMode, auth) => {
+        const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
+        
+        it('should be return true if connection acquisition and query run successfully', async () => {    
+            // Setting up state holders
+            const { newHttpConnection, discoverSpy, spyOnRunners, spyOnRelease } = setupSpies(address)
+
+            // new instances
+            const { provider, params: { scheme, authTokenManager} } = newProvider(address, { newHttpConnection })
+            const expectedQueryApi = `${scheme}://${address.asHostPort()}/db/{databaseName}/query/v2`
+            
+            // mocking
+            discoverSpy.mockResolvedValue({
+                query: expectedQueryApi,
+                version: '5.19.0',
+                edition: 'enterprise'
+            })
+
+            // Subject
+            const result = await provider.verifyAuthentication({ database, accessMode, auth })
+
+            // Assert results
+            expect(result).toBe(true)
+
+            // introspecting
+            expect(newHttpConnection).toHaveBeenCalledTimes(1)
+            expect(newHttpConnection).toHaveBeenCalledWith(expect.objectContaining({
+                queryEndpoint: expectedQueryApi,
+                auth: auth ?? await authTokenManager.getToken()
+            }))
+            expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+                database,
+                mode: accessMode
+            }))
+            expect(spyOnRelease[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRelease[0].mock.invocationCallOrder[0]).toBeGreaterThan(spyOnRunners[0].mock.invocationCallOrder[0])
+        })
+
+        it('should throw when release throws', async () => {
+            const error = new Error('something in the way it crashes')
+            // Setting up state holders
+            const { newHttpConnection, discoverSpy, spyOnRunners, spyOnRelease } = setupSpies(address, { 
+                mockReleaseImplementation: async () => {
+                    throw error
+                }
+            })
+
+            // new instances
+            const { provider, params: { scheme, authTokenManager} } = newProvider(address, { newHttpConnection })
+            const expectedQueryApi = `${scheme}://${address.asHostPort()}/db/{databaseName}/query/v2`
+            
+            // mocking
+            discoverSpy.mockResolvedValue({
+                query: expectedQueryApi,
+                version: '5.19.0',
+                edition: 'enterprise'
+            })
+
+            // Subject and assertion
+            await expect(provider.verifyAuthentication({ database, accessMode, auth })).rejects.toBe(error)
+
+            // introspecting
+            expect(newHttpConnection).toHaveBeenCalledTimes(1)
+            expect(newHttpConnection).toHaveBeenCalledWith(expect.objectContaining({
+                queryEndpoint: expectedQueryApi,
+                auth: auth ?? await authTokenManager.getToken()
+            }))
+            expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+                database,
+                mode: accessMode
+            }))
+            expect(spyOnRelease[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRelease[0].mock.invocationCallOrder[0]).toBeGreaterThan(spyOnRunners[0].mock.invocationCallOrder[0])
+        })
+
+        it.each([
+            [newError('Something in the way it neo4j error', 'Neo.ClientError.Security.CredentialsExpired')],
+            [newError('Something in the way it neo4j error', 'Neo.ClientError.Security.Forbidden')],
+            [newError('Something in the way it neo4j error', 'Neo.ClientError.Security.TokenExpired')],
+            [newError('Something in the way it neo4j error', 'Neo.ClientError.Security.Unauthorized')]
+        ])('should return false on invalid auth errors (%o)', async (error) => {
+            // Setting up state holders
+            const { newHttpConnection, discoverSpy, spyOnRunners, spyOnRelease } = setupSpies(address, { 
+                mockRunImplementation: () => {
+                    const observer = new ResultStreamObserver({
+                        server: address,
+                        highRecordWatermark: 100,
+                        lowRecordWatermark: 1001
+                    })
+        
+                    observer.onError(error)
+        
+                    return observer
+                }
+            })
+
+            // new instances
+            const { provider, params: { scheme, authTokenManager } } = newProvider(address, { newHttpConnection })
+            const expectedQueryApi = `${scheme}://${address.asHostPort()}/db/{databaseName}/query/v2`
+            
+            // mocking
+            discoverSpy.mockResolvedValue({
+                query: expectedQueryApi,
+                version: '5.19.0',
+                edition: 'enterprise'
+            })
+
+            // Subject 
+            const result = await provider.verifyAuthentication({ database, accessMode, auth })
+
+            // Assert results
+            expect(result).toBe(false)
+
+            // introspecting
+            expect(newHttpConnection).toHaveBeenCalledTimes(1)
+            expect(newHttpConnection).toHaveBeenCalledWith(expect.objectContaining({
+                queryEndpoint: expectedQueryApi,
+                auth: auth ?? authTokenManager.getToken()
+            }))
+            expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+                database,
+                mode: accessMode
+            }))
+            expect(spyOnRelease[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRelease[0].mock.invocationCallOrder[0]).toBeGreaterThan(spyOnRunners[0].mock.invocationCallOrder[0])
+        })
+
+        it.each([
+            [new Error('something in the way it crashes')],
+            [newError('Something in the way it neo4j error', 'Neo.ClientError.Security.MadeUp')],
+            [newError('Something in the way it neo4j error', 'Neo.ClientError.Security.AuthenticationRateLimit')],
+            [newError('Something in the way it neo4j error', 'Neo.ClientError.Some.Other')]
+        ])('should fail if query run fail with non related errors (%o)', async (error) => {
+            // Setting up state holders
+            const { newHttpConnection, discoverSpy, spyOnRunners, spyOnRelease } = setupSpies(address, { 
+                mockRunImplementation: () => {
+                    const observer = new ResultStreamObserver({
+                        server: address,
+                        highRecordWatermark: 100,
+                        lowRecordWatermark: 1001
+                    })
+        
+                    observer.onError(error)
+        
+                    return observer
+                }
+            })
+
+            // new instances
+            const { provider, params: { scheme, authTokenManager } } = newProvider(address, { newHttpConnection })
+            const expectedQueryApi = `${scheme}://${address.asHostPort()}/db/{databaseName}/query/v2`
+            
+            // mocking
+            discoverSpy.mockResolvedValue({
+                query: expectedQueryApi,
+                version: '5.19.0',
+                edition: 'enterprise'
+            })
+
+            // Subject and assertion
+            await expect(provider.verifyAuthentication({ database, accessMode, auth })).rejects.toBe(error)
+
+            // introspecting
+            expect(newHttpConnection).toHaveBeenCalledTimes(1)
+            expect(newHttpConnection).toHaveBeenCalledWith(expect.objectContaining({
+                queryEndpoint: expectedQueryApi,
+                auth: auth ?? authTokenManager.getToken()
+            }))
+            expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+                database,
+                mode: accessMode
+            }))
+            expect(spyOnRelease[0]).toHaveBeenCalledTimes(1)
+            expect(spyOnRelease[0].mock.invocationCallOrder[0]).toBeGreaterThan(spyOnRunners[0].mock.invocationCallOrder[0])
+        })
+
+        it('should fail if discovery fails', async () => {
+            const error = new Error('something in the way it crashes')
+            // Setting up state holders
+            const { newHttpConnection, discoverSpy, spyOnRunners, spyOnRelease } = setupSpies(address)
+
+            // new instances
+            const { provider, params: { scheme} } = newProvider(address, { newHttpConnection })
+            
+            // mocking
+            discoverSpy.mockRejectedValue(error)
+
+            // Subject and assertion
+            await expect(provider.verifyAuthentication({ database, accessMode, auth })).rejects.toBe(error)
 
             // introspecting
             expect(newHttpConnection).toHaveBeenCalledTimes(0)

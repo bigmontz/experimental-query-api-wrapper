@@ -36,6 +36,14 @@ const {
 
 type AccessMode = typeof ACCESS_MODE_READ | typeof ACCESS_MODE_WRITE
 
+const AUTHENTICATION_ERRORS = [
+    'Neo.ClientError.Security.CredentialsExpired',
+    'Neo.ClientError.Security.Forbidden',
+    'Neo.ClientError.Security.TokenExpired',
+    'Neo.ClientError.Security.Unauthorized'
+  ]
+  
+
 export type HttpConnectionProviderConfig = {
     id: number,
     log: internal.logger.Logger
@@ -114,22 +122,26 @@ export default class HttpConnectionProvider extends ConnectionProvider {
         const connection = await this._pool.acquire({ queryEndpoint: this._queryEndpoint }, this._address)
 
         try {
-            await new Promise((resolve, reject) => {
-                connection.run('RETURN 1', {}, { 
-                        database: param?.database, mode: param?.accessMode as AccessMode, fetchSize: 200, reactive: false, bookmarks: Bookmarks.empty(), highRecordWatermark: 10, lowRecordWatermark: 0,txConfig: TxConfig.empty() })
-                    .subscribe({
-                        onCompleted() {
-                            resolve(null)
-                        },
-                        onError(error) {
-                            reject(error)
-                        }
-                    })
-            })
+            await run(connection, param)
             return new ServerInfo({
                 address: this._address.asHostPort(),
                 version: discoveryInfo.version
             }, parseFloat(discoveryInfo.version))
+        } finally {
+            await connection.release()
+        }
+    }
+
+    async verifyAuthentication(param: { auth?: types.AuthToken | undefined; database: string ; accessMode: string  }): Promise<boolean> {
+        const connection = await this.acquireConnection({ ...param, bookmarks: Bookmarks.empty() })
+        try {
+            await run(connection, param) 
+            return true
+        } catch (error) {
+            if (AUTHENTICATION_ERRORS.includes(error.code)) {
+                return false
+            }
+            throw error
         } finally {
             await connection.release()
         }
@@ -205,4 +217,26 @@ export default class HttpConnectionProvider extends ConnectionProvider {
         delete this._openConnections[conn.id]
         return await conn.close()
     }
+}
+
+/**
+ * Execute a query and reports possible errors
+ * @param connection 
+ * @param config 
+ * @returns Promise of correct execution
+ */
+function run(connection: Connection, config: { database: string; accessMode?: string | undefined } | undefined): Promise<void> {
+    return new Promise<void>((resolve, reject) => {
+        connection.run('RETURN 1', {}, {
+            database: config?.database, mode: config?.accessMode as AccessMode, fetchSize: 200, reactive: false, bookmarks: Bookmarks.empty(), highRecordWatermark: 10, lowRecordWatermark: 0, txConfig: TxConfig.empty()
+        })
+            .subscribe({
+                onCompleted() {
+                    resolve()
+                },
+                onError(error) {
+                    reject(error)
+                }
+            })
+    })
 }
