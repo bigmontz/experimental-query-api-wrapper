@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { newError, ConnectionProvider, Driver, internal } from 'neo4j-driver-core'
+import { newError, ConnectionProvider, Driver, internal, auth } from 'neo4j-driver-core'
 import { Logger, Wrapper } from '../../src'
 import { WrapperImpl } from '../../src/wrapper.impl'
 
@@ -22,6 +22,7 @@ import { WrapperImpl } from '../../src/wrapper.impl'
 describe('Wrapper', () => {
     let connectionProvider: ConnectionProvider
     let wrapper: Wrapper | null
+    let driver: Driver | null
     const META_INFO = {
         routing: false,
         typename: '',
@@ -34,7 +35,7 @@ describe('Wrapper', () => {
         connectionProvider.close = jest.fn(() => Promise.resolve())
 
 
-        const driver = new Driver(
+        driver = new Driver(
             META_INFO,
             CONFIG,
             mockCreateConnectionProvider(connectionProvider),
@@ -49,7 +50,6 @@ describe('Wrapper', () => {
             wrapper = null
         }
     })
-
 
     it.each([
         ['Promise.resolve(true)', Promise.resolve(true)],
@@ -83,6 +83,72 @@ describe('Wrapper', () => {
         expect(promise).toBe(expectedPromise)
         expect(connectionProvider.verifyConnectivityAndGetServerInfo).toHaveBeenCalledWith({ ...config, accessMode: 'READ' })
         promise?.catch(_ => 'Do nothing').finally(() => { })
+    })
+
+    it.each([
+        ['Promise.resolve(true)', Promise.resolve(true)],
+        ['Promise.resolve(false)', Promise.resolve(false)],
+        [
+            "Promise.reject(newError('something went wrong'))",
+            Promise.reject(newError('something went wrong'))
+        ]
+    ])('.supportsSessionAuth() => %s', (_, expectedPromise) => {
+        connectionProvider.supportsSessionAuth = jest.fn(() => expectedPromise)
+
+        const promise: Promise<boolean> | undefined = wrapper?.supportsSessionAuth()
+
+        expect(promise).toBe(expectedPromise)
+
+        promise?.catch(_ => 'Do nothing').finally(() => { })
+    })
+
+    it.each([
+        ['Promise.resolve(true)', Promise.resolve(true)],
+        ['Promise.resolve(false)', Promise.resolve(false)],
+        [
+            "Promise.reject(newError('something went wrong'))",
+            Promise.reject(newError('something went wrong'))
+        ]
+    ])('.supportsUserImpersonation() => %s', (_, expectedPromise) => {
+        connectionProvider.supportsUserImpersonation = jest.fn(() => expectedPromise)
+
+        const promise: Promise<boolean> | undefined = wrapper?.supportsUserImpersonation()
+
+        expect(promise).toBe(expectedPromise)
+
+        promise?.catch(_ => 'Do nothing').finally(() => { })
+    })
+
+    describe('.session()',  () => {
+        it.each([
+            ['auth.basic', auth.basic('neo5j', 'imposter')],
+            ['auth.bearer', auth.bearer('myjwt')]
+        ])('should support auth (%s)', async (_, token) => {
+            const sessionFactorySpy = jest.spyOn(driver!, 'session')
+
+            const session = wrapper?.session({ auth: token, database: 'neo4j'})
+
+            try  {
+                expect(sessionFactorySpy).toHaveBeenCalledWith(expect.objectContaining({ auth: token }))
+            } finally {
+                await session?.close()
+            }
+        })
+
+        it.each([
+            [undefined],
+            ['imposter']
+        ])('should support impersonation (%s)', async (impersonatedUser) => {
+            const sessionFactorySpy = jest.spyOn(driver!, 'session')
+
+            const session = wrapper?.session({ impersonatedUser, database: 'neo4j'})
+
+            try  {
+                expect(sessionFactorySpy).toHaveBeenCalledWith(expect.objectContaining({ impersonatedUser }))
+            } finally {
+                await session?.close()
+            }
+        })
     })
 
     function mockCreateConnectionProvider(connectionProvider: ConnectionProvider) {

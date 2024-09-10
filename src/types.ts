@@ -23,10 +23,10 @@ type VerifyConnectivity = {
 
 type HttpUrl = `http://${string}` | `https://${string}`
 type WrapperSession = Pick<Session, 'run' | 'lastBookmarks' | 'close' > & Disposable 
-type WrapperSessionConfig = Pick<SessionConfig, 'bookmarks' | 'impersonatedUser' | 'bookmarkManager' | 'defaultAccessMode'> & {
+type WrapperSessionConfig = Pick<SessionConfig, 'bookmarks' | 'impersonatedUser' | 'bookmarkManager' | 'defaultAccessMode' | 'auth'> & {
   database: string
 }
-type Wrapper = Pick<Driver, 'close' | 'supportsMultiDb' > & Disposable & VerifyConnectivity & {
+type Wrapper = Pick<Driver, 'close' | 'supportsMultiDb' | 'supportsSessionAuth' | 'supportsUserImpersonation'> & Disposable & VerifyConnectivity & {
   session(config: WrapperSessionConfig): WrapperSession
 } 
 

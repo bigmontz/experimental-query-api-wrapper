@@ -333,6 +333,24 @@ describe('HttpConnectionProvider', () => {
         })
     })
 
+    describe('.supportsUserImpersonation()', () => {
+        it ('should resolves true', async () => {
+            const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
+            const { provider } = newProvider(address)
+
+            await expect(provider.supportsUserImpersonation()).resolves.toBe(true)
+        })
+    })
+
+    describe('.supportsSessionAuth()', () => {
+        it ('should resolves true', async () => {
+            const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
+            const { provider } = newProvider(address)
+
+            await expect(provider.supportsSessionAuth()).resolves.toBe(true)
+        })
+    })
+
     describe.each(['READ', 'WRITE'].flatMap(mode => [
         ['neo4j', mode],
         ['system', mode],

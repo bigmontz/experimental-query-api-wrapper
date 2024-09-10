@@ -36,15 +36,23 @@ export class WrapperImpl implements Wrapper {
         return this.driver.supportsMultiDb()
     }
     
-    [Symbol.asyncDispose](): Promise<void> {
-        return this.driver.close()
+    supportsSessionAuth(): Promise<boolean> {
+        return this.driver.supportsSessionAuth()
     }
 
+    supportsUserImpersonation(): Promise<boolean> {
+        return this.driver.supportsUserImpersonation()
+    }
+    
     session (config: WrapperSessionConfig): WrapperSession {
         validateDatabase(config);
-
+        
         const session = this.driver.session(config)
         return new WrapperSessionImpl(session)
+    }
+
+    [Symbol.asyncDispose](): Promise<void> {
+        return this.driver.close()
     }
 }
 

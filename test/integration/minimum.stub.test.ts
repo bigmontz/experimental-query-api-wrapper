@@ -51,7 +51,37 @@ describe('minimum requirements stub', () => {
         for await (const session of withSession(wrapper, { database: 'neo4j' })) {
             await expect(session.run('RETURN 1')).resolves.toBeDefined()
         }
+    })
 
+    it('should support session auth', async () => {
+        localMocks.push(
+            await config.loadWireMockStub('session_run_bearer_token_return_1')
+        )
+
+        const wrapper = neo4j.wrapper(
+            `http://${config.hostname}:${config.wireMockPort}`,
+            // this auth doesn't work
+            neo4j.auth.basic('neo4j', 'password')
+        )
+
+        for await (const session of withSession(wrapper, { database: 'neo4j', auth: neo4j.auth.bearer('nicestTokenEver') })) {
+            await expect(session.run('RETURN 1')).resolves.toBeDefined()
+        }
+    })
+
+    it('should support impersonation', async () => {
+        localMocks.push(
+            await config.loadWireMockStub('session_run_bearer_token_impersonated_return_1')
+        )
+
+        const wrapper = neo4j.wrapper(
+            `http://${config.hostname}:${config.wireMockPort}`,
+            neo4j.auth.bearer('nicestTokenEver')
+        )
+
+        for await (const session of withSession(wrapper, { database: 'neo4j', impersonatedUser: 'the_imposter' })) {
+            await expect(session.run('RETURN 1')).resolves.toBeDefined()
+        }
     })
 
 })
