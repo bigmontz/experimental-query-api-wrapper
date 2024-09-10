@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { Driver, ServerInfo } from "neo4j-driver-core";
+import { Driver, ServerInfo, types } from "neo4j-driver-core";
 import { Wrapper, WrapperSession, WrapperSessionConfig } from "./types";
 import WrapperSessionImpl from "./wrapper-session.impl";
 
@@ -34,6 +34,12 @@ export class WrapperImpl implements Wrapper {
 
     supportsMultiDb(): Promise<boolean> {
         return this.driver.supportsMultiDb()
+    }
+
+    verifyAuthentication(config: { auth?: types.AuthToken | undefined; database: string; }): Promise<boolean> {
+        validateDatabase(config)
+
+        return this.driver.verifyAuthentication(config)
     }
     
     supportsSessionAuth(): Promise<boolean> {

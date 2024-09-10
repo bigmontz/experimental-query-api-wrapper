@@ -69,23 +69,6 @@ describe('Wrapper', () => {
     })
 
     it.each([
-        ['Promise.resolve(object)', Promise.resolve({ })],
-        [
-            "Promise.reject(newError('something went wrong on verify conn'))",
-            Promise.reject(newError('something went wrong on verify conn'))
-        ]
-    ])('.verifyConnectivity() => %s', (_, expectedPromise) => {
-        connectionProvider.verifyConnectivityAndGetServerInfo = jest.fn(() => expectedPromise)
-        const config = { database: 'db' }
-
-        const promise: Promise<any> | undefined = wrapper?.verifyConnectivity(config)
-
-        expect(promise).toBe(expectedPromise)
-        expect(connectionProvider.verifyConnectivityAndGetServerInfo).toHaveBeenCalledWith({ ...config, accessMode: 'READ' })
-        promise?.catch(_ => 'Do nothing').finally(() => { })
-    })
-
-    it.each([
         ['Promise.resolve(true)', Promise.resolve(true)],
         ['Promise.resolve(false)', Promise.resolve(false)],
         [
@@ -117,6 +100,51 @@ describe('Wrapper', () => {
         expect(promise).toBe(expectedPromise)
 
         promise?.catch(_ => 'Do nothing').finally(() => { })
+    })
+
+    it.each([
+        ['Promise.resolve(object)', Promise.resolve({ })],
+        [
+            "Promise.reject(newError('something went wrong on verify conn'))",
+            Promise.reject(newError('something went wrong on verify conn'))
+        ]
+    ])('.verifyConnectivity() => %s', (_, expectedPromise) => {
+        connectionProvider.verifyConnectivityAndGetServerInfo = jest.fn(() => expectedPromise)
+        const config = { database: 'db' }
+
+        const promise: Promise<any> | undefined = wrapper?.verifyConnectivity(config)
+
+        expect(promise).toBe(expectedPromise)
+        expect(connectionProvider.verifyConnectivityAndGetServerInfo).toHaveBeenCalledWith({ ...config, accessMode: 'READ' })
+        promise?.catch(_ => 'Do nothing').finally(() => { })
+    })
+
+    it.each([
+        ['with auth, Promise.resolve(true)', Promise.resolve(true), auth.basic('new_user', 'word_pass')],
+        ['with auth, Promise.resolve(false)', Promise.resolve(false), auth.basic('new_user', 'word_pass')],
+        [
+            "with auth, Promise.reject(newError('something went wrong on verify authentication'))",
+            Promise.reject(newError('something went wrong on verify authentication')),
+            auth.basic('new_user', 'word_pass')
+        ],
+        ['without auth, Promise.resolve(true)', Promise.resolve(true), undefined],
+        ['without auth, Promise.resolve(false)', Promise.resolve(false), undefined],
+        [
+            "without auth, Promise.reject(newError('something went wrong on verify authentication'))",
+            Promise.reject(newError('something went wrong on verify authentication')),
+            undefined
+        ]
+    ])('.verifyAuthentication() => %s', (_, expectedPromise, authToken?) => {
+        connectionProvider.verifyAuthentication = jest.fn(() => expectedPromise)
+        const config = authToken != null ? { database: 'db', auth: authToken  } : { database: 'db' }
+
+        const promise: Promise<boolean> | undefined = wrapper?.verifyAuthentication(config)
+
+        expect(promise).toEqual(expectedPromise)
+        expect(connectionProvider.verifyAuthentication).toHaveBeenCalledWith({...config, accessMode: 'READ'})
+
+        promise?.catch(_ => 'Do nothing').finally(() => { })
+        expectedPromise.catch(_ => 'Do nothing').finally(() => {})
     })
 
     describe('.session()',  () => {
