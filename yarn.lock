@@ -2125,10 +2125,10 @@ natural-compare@^1.4.0:
   resolved "https://registry.yarnpkg.com/natural-compare/-/natural-compare-1.4.0.tgz#4abebfeed7541f2c27acfb29bdbbd15c8d5ba4f7"
   integrity sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==
 
-neo4j-driver-core@5.24.0:
-  version "5.24.0"
-  resolved "https://registry.yarnpkg.com/neo4j-driver-core/-/neo4j-driver-core-5.24.0.tgz#08df2b6560cac980073822978207b83ff89dd904"
-  integrity sha512-X/UdHo0Cwk1aCQPTzSxkleuXAwJ7Es0/1goi3ckrFU/h+Va9QUkPGub07ohG9tXBi4wMhQFbtFn/yKLFlVwTlg==
+neo4j-driver-core@^5.24.1:
+  version "5.24.1"
+  resolved "https://registry.yarnpkg.com/neo4j-driver-core/-/neo4j-driver-core-5.24.1.tgz#1d3d360adbb3724d42a8d72bb1f4e240daeac718"
+  integrity sha512-nPPAXnEypaE4HloM2x8GggF5YT7e+LpcEuyYt7ELuax25/SH7ZtdkemnH0voAVfqBwQXSWP9CFpPFznDOU6T5A==
 
 node-int64@^0.4.0:
   version "0.4.0"
