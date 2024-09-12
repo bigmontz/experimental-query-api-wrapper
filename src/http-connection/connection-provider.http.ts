@@ -227,7 +227,7 @@ export default class HttpConnectionProvider extends ConnectionProvider {
  */
 function run(connection: Connection, config: { database: string; accessMode?: string | undefined } | undefined): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-        connection.run('RETURN 1', {}, {
+        connection.run('CALL db.ping()', {}, {
             database: config?.database, mode: config?.accessMode as AccessMode, fetchSize: 200, reactive: false, bookmarks: Bookmarks.empty(), highRecordWatermark: 10, lowRecordWatermark: 0, txConfig: TxConfig.empty()
         })
             .subscribe({

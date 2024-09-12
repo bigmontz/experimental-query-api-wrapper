@@ -359,7 +359,7 @@ describe('HttpConnectionProvider', () => {
     ]))('.verifyConnectivityAndGetServerInfo({ database: "%s", accessMode: "%"})', (database, accessMode) => {
         const address = internal.serverAddress.ServerAddress.fromUrl('localhost:7474')
         
-        it('should be able to acquire a new connection and run "RETURN 1" using access mode', async () => {    
+        it('should be able to acquire a new connection and run "CALL db.ping()" using access mode', async () => {    
             // Setting up state holders
             const { newHttpConnection, discoverSpy, spyOnRunners, spyOnRelease } = setupSpies(address)
 
@@ -388,7 +388,7 @@ describe('HttpConnectionProvider', () => {
                 queryEndpoint: expectedQueryApi
             }))
             expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
-            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('CALL db.ping()', {}, expect.objectContaining({
                 database,
                 mode: accessMode
             }))
@@ -425,7 +425,7 @@ describe('HttpConnectionProvider', () => {
                 queryEndpoint: expectedQueryApi
             }))
             expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
-            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('CALL db.ping()', {}, expect.objectContaining({
                 database,
                 mode: accessMode
             }))
@@ -470,7 +470,7 @@ describe('HttpConnectionProvider', () => {
                 queryEndpoint: expectedQueryApi
             }))
             expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
-            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('CALL db.ping()', {}, expect.objectContaining({
                 database,
                 mode: accessMode
             }))
@@ -539,7 +539,7 @@ describe('HttpConnectionProvider', () => {
                 auth: auth ?? await authTokenManager.getToken()
             }))
             expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
-            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('CALL db.ping()', {}, expect.objectContaining({
                 database,
                 mode: accessMode
             }))
@@ -577,7 +577,7 @@ describe('HttpConnectionProvider', () => {
                 auth: auth ?? await authTokenManager.getToken()
             }))
             expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
-            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('CALL db.ping()', {}, expect.objectContaining({
                 database,
                 mode: accessMode
             }))
@@ -630,7 +630,7 @@ describe('HttpConnectionProvider', () => {
                 auth: auth ?? authTokenManager.getToken()
             }))
             expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
-            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('CALL db.ping()', {}, expect.objectContaining({
                 database,
                 mode: accessMode
             }))
@@ -680,7 +680,7 @@ describe('HttpConnectionProvider', () => {
                 auth: auth ?? authTokenManager.getToken()
             }))
             expect(spyOnRunners[0]).toHaveBeenCalledTimes(1)
-            expect(spyOnRunners[0]).toHaveBeenCalledWith('RETURN 1', {}, expect.objectContaining({
+            expect(spyOnRunners[0]).toHaveBeenCalledWith('CALL db.ping()', {}, expect.objectContaining({
                 database,
                 mode: accessMode
             }))

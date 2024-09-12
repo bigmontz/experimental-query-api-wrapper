@@ -91,8 +91,11 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     await wrapper?.close()
   })
 
-  it('should verifyConnectivity', async () => {
-    await expect(wrapper.verifyConnectivity({ database: config.database })).resolves.toBeDefined()
+  it.each([
+    [config.database],
+    ['system']
+  ])('should verifyConnectivity ({ database: "%s"})', async (database) => {
+    await expect(wrapper.verifyConnectivity({ database })).resolves.toBeDefined()
   })
 
   it.each([
