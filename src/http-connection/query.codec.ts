@@ -442,13 +442,14 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
         if (durationStringWithP.endsWith('W')) {
             const weeksString = durationStringWithP.slice(0, durationStringWithP.length - 1)
             const weeks = this._decodeInteger(weeksString)
-            throw newError('Duration in weeks are not supported yet', error.PROTOCOL_ERROR)
+            throw newError('Duration in weeks is not supported yet', error.PROTOCOL_ERROR)
         }
 
         let month = '0'
         let day = '0'
         let second = '0'
         let nanosecond = '0'
+        let hour = '0'
         let currentNumber = ''
         let timePart = false
 
@@ -459,38 +460,47 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
                 switch (ch) {
                     case 'M':
                         if (timePart) {
-                            throw newError(`Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
+                            throw newError(`Duration is not well formatted. Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
                         }
                         month = currentNumber
                         break;
                     case 'D':
                         if (timePart) {
-                            throw newError(`Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
+                            throw newError(`Duration is not well formatted. Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
                         }
                         day = currentNumber
                         break
                     case 'S':
                         if (!timePart) {
-                            throw newError(`Unexpected Duration component ${ch} in date part`, error.PROTOCOL_ERROR)
+                            throw newError(`Duration is not well formatted. Unexpected Duration component ${ch} in date part`, error.PROTOCOL_ERROR)
                         }
                         const nanosecondSeparator = currentNumber.includes(',') ? ',' : '.';
                         [second, nanosecond] = currentNumber.split(nanosecondSeparator)
+                        break
+                    case 'H':
+                        if (!timePart) {
+                            if (!timePart) {
+                                throw newError(`Duration is not well formatted. Unexpected Duration component ${ch} in date part`, error.PROTOCOL_ERROR)
+                            }
+                        }
+                        hour = currentNumber
                         break
                     case 'T':
                         timePart = true
                         break
                     default:
-                        throw newError(`Unexpected Duration component ${ch}`, error.PROTOCOL_ERROR)
+                        throw newError(`Duration is not well formatted. Unexpected Duration component ${ch}`, error.PROTOCOL_ERROR)
                 }
                 currentNumber = ''
             }
         }
 
+        const secondsInt = int(hour).multiply(3600).add(second)
         const nanosecondString = nanosecond ?? '0'
         return new Duration(
             this._decodeInteger(month),
             this._decodeInteger(day),
-            this._decodeInteger(second),
+            this._normalizeInteger(secondsInt),
             this._decodeInteger(nanosecondString.padEnd(9, '0'))
         )
     }
