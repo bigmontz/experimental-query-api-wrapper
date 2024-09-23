@@ -305,26 +305,43 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
 
     _decodeTime(value: string): Time<Integer | bigint | number> | LocalTime<Integer | bigint | number> {
         // 12:50:35.556+01:00
+        // 12:50:35+01:00
+        // 12:50:35Z
         const [hourStr, minuteString, secondNanosecondAndOffsetString, offsetMinuteString] = value.split(':')
-        const [secondStr, nanosecondAndOffsetString] = secondNanosecondAndOffsetString.split('.')
+        let [secondStr, nanosecondAndOffsetString] = secondNanosecondAndOffsetString.split('.')
+        let [nanosecondString, offsetHourString, isPositive, hasOffset]: [string, string, boolean, boolean] = ['0', '0', true, true]
 
-        // @ts-expect-error
-        const [nanosecondString, offsetHourString, isPositive]: [string, string, boolean] = nanosecondAndOffsetString.indexOf('+') >= 0 ?
-            [...nanosecondAndOffsetString.split('+'), true] : (
-                nanosecondAndOffsetString.indexOf('-') >= 0 ?
-                    [...nanosecondAndOffsetString.split('-'), false] : (
-                        nanosecondAndOffsetString.indexOf('Z') >= 0 ?
-                            [nanosecondAndOffsetString.slice(0, nanosecondAndOffsetString.length - 1), undefined, true] :
-                            [nanosecondAndOffsetString.slice(0, nanosecondAndOffsetString.length - 1), '0', true]
-                    )
+        if (nanosecondAndOffsetString !== undefined) {
+            if ( nanosecondAndOffsetString.indexOf('+') >= 0 ) {
+                [nanosecondString, offsetHourString] = [...nanosecondAndOffsetString.split('+')]
+            } else if (nanosecondAndOffsetString.indexOf('-') >= 0) {
+                [nanosecondString, offsetHourString] = [...nanosecondAndOffsetString.split('-')]
+                isPositive = false
+            } else if (nanosecondAndOffsetString.indexOf('Z') >= 0) {
+                [nanosecondString] = [...nanosecondAndOffsetString.split('Z')]
+            } else {
+                hasOffset = false
+                if (nanosecondAndOffsetString.indexOf('[')) {
+                    [nanosecondString] = [...nanosecondAndOffsetString.split('[')]
+                }
+            }
+        } else  {
+            if ( secondStr.indexOf('+') >= 0 ) {
+                [secondStr, offsetHourString] = [...secondStr.split('+')]
+            } else if ( secondStr.indexOf('-') >= 0 ) {
+                [secondStr, offsetHourString] = [...secondStr.split('-')]
+                isPositive = false
+            } else if (secondStr.indexOf('Z') < 0) {
+                hasOffset = false
+            }
+        }
 
-            )
+        secondStr = secondStr.substring(0, 2)
 
+        const nanosecond = int(nanosecondString.padEnd(9, '0'))
 
-        let nanosecond = int(nanosecondString.padEnd(9, '0'))
-
-        if (offsetHourString != null) {
-            const timeZoneOffsetInSeconds = int(offsetHourString).multiply(60).add(int(offsetMinuteString)).multiply(60).multiply(isPositive ? 1 : -1)
+        if (hasOffset) {
+            const timeZoneOffsetInSeconds = int(offsetHourString).multiply(60).add(int(offsetMinuteString ?? '0')).multiply(60).multiply(isPositive ? 1 : -1)
 
             return new Time(
                 this._decodeInteger(hourStr),
@@ -340,8 +357,6 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
             this._decodeInteger(secondStr),
             this._normalizeInteger(nanosecond),
         )
-
-
     }
 
     _decodeDate(value: string): Date<Integer | bigint | number> {

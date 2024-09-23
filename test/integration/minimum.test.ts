@@ -198,7 +198,9 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     ['Duration P22DT19H51M49.5S', 'duration({months: 0.75})', new Duration(int(0), int(22), int(71509), int(500000000))], 
     ['Duration P17DT12H ', 'duration({weeks: 2.5})', new Duration(int(0), int(17), int(43200), int(0))],
     ['Duration PT1M31.123456789S', 'duration({minutes: 1.5, seconds: 1, milliseconds: 123, microseconds: 456, nanoseconds: 789})', new Duration(int(0), int(0), int(91), int(123456789))],
-    ['Duration PT1M31.123456789S', 'duration({minutes: 1.5, seconds: 1, nanoseconds: 123456789})', new Duration(int(0), int(0), int(91), int(123456789))] 
+    ['Duration PT1M31.123456789S', 'duration({minutes: 1.5, seconds: 1, nanoseconds: 123456789})', new Duration(int(0), int(0), int(91), int(123456789))],
+    // datetime
+    ['Datetime "2020-01-01', 'datetime("2020-01-01")', new DateTime(int(2020), int(1), int(1), int(0), int(0), int(0), int(0), int(0))] 
   ])('should be able to echo "%s" (%s)', async (_, statement, expectedOutput) => {
     for await (const session of withSession({ database: config.database })) {
       const { records: [first] } = await session.run(`RETURN ${statement} as output`)

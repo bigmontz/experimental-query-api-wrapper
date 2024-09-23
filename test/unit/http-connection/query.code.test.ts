@@ -609,14 +609,17 @@ describe('QueryResponseCodec', () => {
                     ['+0001-01-05T10:15:20.0', new LocalDateTime(toInt(1), toInt(1), toInt(5), toInt(10), toInt(15), toInt(20), toInt(0))]
                 ].map(([_value, expected]) => [`LocalDateTime (value=${_value})`, { $type: 'LocalDateTime', _value }, expected, config]),
                 ...[
-                    ['1988-08-23T12:50:35.556000000Z[Antarctica/Troll]', new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll')],
+                    ['1988-08-23T12:50:35.556000000[Antarctica/Troll]', new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll')],
                     ['-1988-08-23T12:50:35.556000000+02:00[Europe/Berlin]', new DateTime(toInt(-1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(7200), 'Europe/Berlin')],
                     ['+1986-08-23T12:50:35.556000000-03:00[America/Sao_Paulo]', new DateTime(toInt(1986), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(-10800), 'America/Sao_Paulo')]
                 ].map(([_value, expected]) => [`ZonedDateTime (value=${_value})`, { $type: 'ZonedDateTime', _value }, expected, config]),
                 ...[
                     ['1988-08-23T12:50:35.556000000+02:00', new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(7200))],
                     ['-1988-08-23T12:50:35.556000000+02:00', new DateTime(toInt(-1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(7200))],
-                    ['+1986-08-23T12:50:35.556000000-03:00', new DateTime(toInt(1986), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(-10800))]
+                    ['+1986-08-23T12:50:35.556000000-03:00', new DateTime(toInt(1986), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(-10800))],
+                    ['2020-01-01T00:00:00Z', new DateTime(toInt(2020), toInt(1), toInt(1), toInt(0), toInt(0), toInt(0), toInt(0), toInt(0))],
+                    ['+2020-01-01T00:00:00-02:00', new DateTime(toInt(2020), toInt(1), toInt(1), toInt(0), toInt(0), toInt(0), toInt(0), toInt(-7200))],
+                    ['-2020-01-01T00:00:00+02:00', new DateTime(toInt(-2020), toInt(1), toInt(1), toInt(0), toInt(0), toInt(0), toInt(0), toInt(7200))]
                 ].map(([_value, expected]) => [`OffsetDateTime (value=${_value})`, { $type: 'OffsetDateTime', _value }, expected, config]),
                 ...[
                     ['1988-08-23T12:50:35.556000000', new LocalDateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000))],
@@ -678,7 +681,7 @@ describe('QueryResponseCodec', () => {
                         time: { $type: 'Time', _value: '12:50:35.556000000+01:00' },
                         localTime: { $type: 'LocalTime', _value: '12:50:35.556000000' },
                         offsetDateTime: { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
-                        zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                        zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' },
                         zonedAndOffsetDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
                         localDateTime: { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
                         duration: { $type: 'Duration', _value: 'P0M14DT16S' }
@@ -716,7 +719,7 @@ describe('QueryResponseCodec', () => {
                         { $type: 'Time', _value: '12:50:35.556000000+01:00' },
                         { $type: 'LocalTime', _value: '12:50:35.556000000' },
                         { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
-                        { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                        { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' },
                         { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
                         { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
                         { $type: 'Duration', _value: 'P0M14DT16S' }
@@ -772,7 +775,7 @@ describe('QueryResponseCodec', () => {
                                 time: { $type: 'Time', _value: '12:50:35.556000000+01:00' },
                                 localTime: { $type: 'LocalTime', _value: '12:50:35.556000000' },
                                 offsetDateTime: { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
-                                zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                                zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' },
                                 zonedAndOffsetDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
                                 localDateTime: { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
                                 duration: { $type: 'Duration', _value: 'P0M14DT16S' }
@@ -840,7 +843,7 @@ describe('QueryResponseCodec', () => {
                                 time: { $type: 'Time', _value: '12:50:35.556000000+01:00' },
                                 localTime: { $type: 'LocalTime', _value: '12:50:35.556000000' },
                                 offsetDateTime: { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
-                                zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                                zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' },
                                 zonedAndOffsetDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
                                 localDateTime: { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
                                 duration: { $type: 'Duration', _value: 'P0M14DT16S' }
@@ -1090,7 +1093,7 @@ describe('QueryResponseCodec', () => {
                     [{ $type: 'Time', _value: '12:50:35.556000000+01:00' }],
                     [{ $type: 'LocalTime', _value: '12:50:35.556000000' }],
                     [{ $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' }],
-                    [{ $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' }],
+                    [{ $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' }],
                     [{ $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' }],
                     [{ $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' }],
                     [{ $type: 'Duration', _value: 'P0M14DT16S' }]
@@ -1125,7 +1128,7 @@ describe('QueryResponseCodec', () => {
                     { $type: 'Time', _value: '12:50:35.556000000+01:00' },
                     { $type: 'LocalTime', _value: '12:50:35.556000000' },
                     { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
-                    { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                    { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' },
                     { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
                     { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
                     { $type: 'Duration', _value: 'P0M14DT16S' }]
@@ -1180,7 +1183,7 @@ describe('QueryResponseCodec', () => {
                                     time: { $type: 'Time', _value: '12:50:35.556000000+01:00' },
                                     localTime: { $type: 'LocalTime', _value: '12:50:35.556000000' },
                                     offsetDateTime: { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
-                                    zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                                    zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' },
                                     zonedAndOffsetDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
                                     localDateTime: { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
                                     duration: { $type: 'Duration', _value: 'P0M14DT16S' }
@@ -1248,7 +1251,7 @@ describe('QueryResponseCodec', () => {
                                     time: { $type: 'Time', _value: '12:50:35.556000000+01:00' },
                                     localTime: { $type: 'LocalTime', _value: '12:50:35.556000000' },
                                     offsetDateTime: { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
-                                    zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000Z[Antarctica/Troll]' },
+                                    zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' },
                                     zonedAndOffsetDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
                                     localDateTime: { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
                                     duration: { $type: 'Duration', _value: 'P0M14DT16S' }
