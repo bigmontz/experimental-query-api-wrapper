@@ -624,10 +624,11 @@ describe('QueryResponseCodec', () => {
                     ['+1986-08-23T12:50:35.556000000', new LocalDateTime(toInt(1986), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000))]
                 ].map(([_value, expected]) => [`LocalDateTime (value=${_value})`, { $type: 'LocalDateTime', _value }, expected, config]),
                 ...[
+                    ['P10W', new Duration(toInt(0), toInt(70), toInt(0), toInt(0))],
                     ['P10M', new Duration(toInt(10), toInt(0), toInt(0), toInt(0))],
                     ['P15D', new Duration(toInt(0), toInt(15), toInt(0), toInt(0))],
                     ['P10M15D', new Duration(toInt(10), toInt(15), toInt(0), toInt(0))],
-                    ['P10M15D', new Duration(toInt(10), toInt(15), toInt(0), toInt(0))],
+                    ['P10M2W15D', new Duration(toInt(10), toInt(2 * 7 + 15), toInt(0), toInt(0))],
                     ['P10M15DT3H', new Duration(toInt(10), toInt(15), toInt(3 * 3600), toInt(0))],
                     ['P10M15DT2H3S', new Duration(toInt(10), toInt(15), toInt(2 * 3600 + 3), toInt(0))],
                     ['P10M15DT5H0.000003S', new Duration(toInt(10), toInt(15), toInt(5 * 3600), toInt(3000))],
@@ -635,6 +636,9 @@ describe('QueryResponseCodec', () => {
                     ['P10M15DT8H20,000003S', new Duration(toInt(10), toInt(15), toInt(8 * 3600 + 20), toInt(3000))],
                     ['PT15H20,000003S', new Duration(toInt(0), toInt(0), toInt(15 * 3600 + 20), toInt(3000))],
                     ['PT20H0.000003S', new Duration(toInt(0), toInt(0), toInt(20 * 3600), toInt(3000))],
+                    ['P10M15DT5H16M0.000003S', new Duration(toInt(10), toInt(15), toInt(5 * 3600 + 16 * 60), toInt(3000))],
+                    ['P10M15DT1H5M20.000003S', new Duration(toInt(10), toInt(15), toInt(3600 + 5 * 60 + 20), toInt(3000))],
+                    ['P10M5W15DT1H5M20.000003S', new Duration(toInt(10), toInt(5 * 7 + 15), toInt(3600 + 5 * 60 + 20), toInt(3000))],
                     ['P10M15DT3S', new Duration(toInt(10), toInt(15), toInt(3), toInt(0))],
                     ['P10M15DT0.000003S', new Duration(toInt(10), toInt(15), toInt(0), toInt(3000))],
                     ['P10M15DT20.000003S', new Duration(toInt(10), toInt(15), toInt(20), toInt(3000))],

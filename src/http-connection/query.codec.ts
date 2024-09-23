@@ -435,21 +435,15 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
 
     _decodeDuration(value: string): Duration<Integer | bigint | number> {
         // P14DT16H12M
-        // Duration is PnW
-
         const durationStringWithP = value.slice(1, value.length)
 
-        if (durationStringWithP.endsWith('W')) {
-            const weeksString = durationStringWithP.slice(0, durationStringWithP.length - 1)
-            const weeks = this._decodeInteger(weeksString)
-            throw newError('Duration in weeks is not supported yet', error.PROTOCOL_ERROR)
-        }
-
         let month = '0'
+        let week = 'week'
         let day = '0'
         let second = '0'
         let nanosecond = '0'
         let hour = '0'
+        let minute = 'o'
         let currentNumber = ''
         let timePart = false
 
@@ -459,11 +453,22 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
             } else {
                 switch (ch) {
                     case 'M':
+                        // minutes
                         if (timePart) {
-                            throw newError(`Duration is not well formatted. Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
+                            minute = currentNumber
+                        // months
+                        } else {
+                            month = currentNumber
                         }
-                        month = currentNumber
                         break;
+                    case 'W':
+                        if (!timePart) {
+                            if (timePart) {
+                                throw newError(`Duration is not well formatted. Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
+                            }
+                        }
+                        week = currentNumber;
+                        break
                     case 'D':
                         if (timePart) {
                             throw newError(`Duration is not well formatted. Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
@@ -493,11 +498,20 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
             }
         }
 
-        const secondsInt = int(hour).multiply(3600).add(second)
+        const secondsInt = int(hour)
+            .multiply(60)
+            .add(minute)
+            .multiply(60)
+            .add(second)
+
+        const dayInt = int(week)
+            .multiply(7)
+            .add(day)
+
         const nanosecondString = nanosecond ?? '0'
         return new Duration(
             this._decodeInteger(month),
-            this._decodeInteger(day),
+            this._normalizeInteger(dayInt),
             this._normalizeInteger(secondsInt),
             this._decodeInteger(nanosecondString.padEnd(9, '0'))
         )
