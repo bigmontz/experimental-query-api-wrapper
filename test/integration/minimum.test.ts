@@ -191,7 +191,14 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     ['CARTESIAN Point 2D', 'point({x: 2.3, y: 4.5})', new Point(int(7203), 2.3, 4.5)],
     ['CARTESIAN Point 3D', 'point({x: 2.3, y: 4.5, z:7.5})', new Point(int(9157), 2.3, 4.5, 7.5)],
     ['WGS Point 2D', 'point({longitude: 12.78, latitude: 56.7})', new Point(int(4326), 12.78, 56.7)],
-    ['WGS Point 3D', 'point({longitude: 12.78, latitude: 56.7, height: 120.57})', new Point(int(4979), 12.78, 56.7, 120.57)]
+    ['WGS Point 3D', 'point({longitude: 12.78, latitude: 56.7, height: 120.57})', new Point(int(4979), 12.78, 56.7, 120.57)],
+    // Durations examples in Cypher manual
+    ['Duration P14DT16H12M', 'duration({days: 14, hours:16, minutes: 12})', new Duration(int(0), int(14), int(58320), int(0))], 
+    ['Duration P5M1DT12H', 'duration({months: 5, days: 1.5})', new Duration(int(5), int(1), int(43200), int(0))], 
+    ['Duration P22DT19H51M49.5S', 'duration({months: 0.75})', new Duration(int(0), int(22), int(71509), int(500000000))], 
+    ['Duration P17DT12H ', 'duration({weeks: 2.5})', new Duration(int(0), int(17), int(43200), int(0))],
+    ['Duration PT1M31.123456789S', 'duration({minutes: 1.5, seconds: 1, milliseconds: 123, microseconds: 456, nanoseconds: 789})', new Duration(int(0), int(0), int(91), int(123456789))],
+    ['Duration PT1M31.123456789S', 'duration({minutes: 1.5, seconds: 1, nanoseconds: 123456789})', new Duration(int(0), int(0), int(91), int(123456789))] 
   ])('should be able to echo "%s" (%s)', async (_, statement, expectedOutput) => {
     for await (const session of withSession({ database: config.database })) {
       const { records: [first] } = await session.run(`RETURN ${statement} as output`)
