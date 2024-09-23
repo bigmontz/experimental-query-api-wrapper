@@ -438,12 +438,12 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
         const durationStringWithP = value.slice(1, value.length)
 
         let month = '0'
-        let week = 'week'
+        let week = '0'
         let day = '0'
         let second = '0'
         let nanosecond = '0'
         let hour = '0'
-        let minute = 'o'
+        let minute = '0'
         let currentNumber = ''
         let timePart = false
 
@@ -462,10 +462,8 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
                         }
                         break;
                     case 'W':
-                        if (!timePart) {
-                            if (timePart) {
-                                throw newError(`Duration is not well formatted. Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
-                            }
+                        if (timePart) {
+                            throw newError(`Duration is not well formatted. Unexpected Duration component ${ch} in time part`, error.PROTOCOL_ERROR)
                         }
                         week = currentNumber;
                         break
