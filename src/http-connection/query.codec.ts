@@ -479,9 +479,7 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
                         break
                     case 'H':
                         if (!timePart) {
-                            if (!timePart) {
-                                throw newError(`Duration is not well formatted. Unexpected Duration component ${ch} in date part`, error.PROTOCOL_ERROR)
-                            }
+                            throw newError(`Duration is not well formatted. Unexpected Duration component ${ch} in date part`, error.PROTOCOL_ERROR)
                         }
                         hour = currentNumber
                         break
