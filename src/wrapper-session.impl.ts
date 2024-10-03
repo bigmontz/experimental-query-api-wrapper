@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { RecordShape, TransactionConfig, Result, Session } from "neo4j-driver-core";
+import { RecordShape, TransactionConfig, Result, Session, TransactionPromise } from "neo4j-driver-core";
 import { Query } from "neo4j-driver-core/types/types";
 import { WrapperSession } from "./types";
 
@@ -30,6 +30,10 @@ export default class WrapperSessionImpl implements WrapperSession {
 
     run<R extends RecordShape = RecordShape>(query: Query, parameters?: any, transactionConfig?: TransactionConfig | undefined): Result<R> {
         return this.session.run(query, parameters, transactionConfig)
+    }
+
+    beginTransaction(transactionConfig?: TransactionConfig | undefined): TransactionPromise {
+        return this.session.beginTransaction(transactionConfig)
     }
     
     lastBookmarks(): string[] {

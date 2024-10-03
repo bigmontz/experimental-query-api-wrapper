@@ -677,8 +677,6 @@ export class QueryRequestCodec {
 
     }
 
-
-
     get contentType(): string {
         return NEO4J_QUERY_CONTENT_TYPE
     }
