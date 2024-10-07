@@ -21,6 +21,7 @@ import { ResultStreamObserver } from "./stream-observers"
 import { QueryRequestCodec, QueryResponseCodec, RawQueryResponse } from "./query.codec"
 import { BeginTransactionRequestCodec, BeginTransactionResponse, BeginTransactionResponseCodec, CommitTransactionRequestCodec, CommitTransactionResponse, CommitTransactionResponseCodec, RollbackTransactionRequestCodec, RollbackTransactionResponse, RollbackTransactionResponseCodec } from "./transaction.codec"
 import { WrapperConfig } from "../types"
+import Pipe from "./lang/pipe"
 
 export type HttpScheme = 'http' | 'https'
 
@@ -50,6 +51,7 @@ export default class HttpConnection extends Connection {
     private _errorHandler: (error: Error & { code: string, retriable: boolean }) => Error
     private _open: boolean
     private _currentTx: { id: string, affinity?: string, host: string, database: string } | undefined
+    private _workPipe: Pipe
 
     constructor(config: HttpConnectionConfig) {
         super()
@@ -62,6 +64,7 @@ export default class HttpConnection extends Connection {
         this._errorHandler = config.errorHandler
         this._open = true
         this._currentTx = undefined
+        this._workPipe = new Pipe(config.logger)
         this._sessionAffinityHeader = config.config.httpSessionAffinityHeader ?? 'neo4j-cluster-affinity'
     }
 
@@ -82,62 +85,67 @@ export default class HttpConnection extends Connection {
 
         this._abortController = new AbortController()
 
-        const request: RequestInit & { url: string } = {
-            url: this._getTransactionApi(config?.database!),
-            method: 'POST',
-            mode: 'cors',
-            headers: this._headers(requestCodec),
-            signal: this._abortController.signal,
-            body: JSON.stringify(requestCodec.body)
-        }
-
-        this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
-
-        fetch(request.url, request).
-            then(async (res) => {
-                return [res.headers.get('content-type'), (await res.json()) as RawQueryResponse]
-            })
-            .catch((error) => this._handleAndReThrown(newError(`Failure accessing "${request.url}"`, 'SERVICE_UNAVAILABLE', error)))
-            .catch((error) => observer.onError(error))
-            .then(async ([contentType, rawQueryResponse]: [string, RawQueryResponse]) => {
-                if (rawQueryResponse == null) {
-                    // is already dead
-                    return
-                }
-                this._log?.debug(`${this} ${JSON.stringify(rawQueryResponse)}`)
-                const batchSize = config?.fetchSize ?? Number.MAX_SAFE_INTEGER
-                const codec = QueryResponseCodec.of(this._config, contentType, rawQueryResponse);
-
-                if (codec.error) {
-                    throw codec.error
-                }
-                observer.onKeys(codec.keys)
-                const stream = codec.stream()
-
-                while (!observer.completed) {
-                    if (observer.paused) {
-                        await new Promise((resolve) => setTimeout(resolve, 20))
-                        continue
+        this._workPipe.attach(() => {
+            const request: RequestInit & { url: string } = {
+                url: this._getTransactionApi(config?.database!),
+                method: 'POST',
+                mode: 'cors',
+                headers: this._headers(requestCodec),
+                signal: this._abortController?.signal,
+                body: JSON.stringify(requestCodec.body)
+            }
+    
+            this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
+    
+            return fetch(request.url, request).
+                then(async (res) => {
+                    return [res.headers.get('content-type'), (await res.json()) as RawQueryResponse]
+                })
+                .catch((error) => this._handleAndReThrown(newError(`Failure accessing "${request.url}"`, 'SERVICE_UNAVAILABLE', error)))
+                .catch((error) => observer.onError(error))
+                .then(async ([contentType, rawQueryResponse]: [string, RawQueryResponse]) => {
+                    if (rawQueryResponse == null) {
+                        // is already dead
+                        return
                     }
-
-                    for (let i = 0; !observer.paused && i < batchSize && !observer.completed; i++) {
-                        const { done, value: rawRecord } = stream.next()
-                        if (!done) {
-                            observer.onNext(rawRecord)
-                        } else {
-                            observer.onCompleted(codec.meta)
+                    this._log?.debug(`${this} ${JSON.stringify(rawQueryResponse)}`)
+                    const batchSize = config?.fetchSize ?? Number.MAX_SAFE_INTEGER
+                    const codec = QueryResponseCodec.of(this._config, contentType, rawQueryResponse);
+    
+                    if (codec.error) {
+                        throw codec.error
+                    }
+                    observer.onKeys(codec.keys)
+                    const stream = codec.stream()
+    
+                    while (!observer.completed) {
+                        if (observer.paused) {
+                            await new Promise((resolve) => setTimeout(resolve, 20))
+                            continue
+                        }
+    
+                        for (let i = 0; !observer.paused && i < batchSize && !observer.completed; i++) {
+                            const { done, value: rawRecord } = stream.next()
+                            if (!done) {
+                                observer.onNext(rawRecord)
+                            } else {
+                                observer.onCompleted(codec.meta)
+                            }
                         }
                     }
-                }
-
-                observer.onCompleted(codec.meta)
-
-            })
-            .catch(this._handleAndReThrown.bind(this))
-            .catch(error => observer.onError(error))
-            .finally(() => {
-                this._abortController = undefined
-            })
+    
+                    observer.onCompleted(codec.meta)
+    
+                })
+                .catch(this._handleAndReThrown.bind(this))
+                .catch(error => { 
+                    observer.onError(error)
+                    throw error
+                })
+                .finally(() => {
+                    this._abortController = undefined
+                })
+        })
 
         return observer
     }
@@ -173,54 +181,60 @@ export default class HttpConnection extends Connection {
 
         this._abortController = new AbortController()
 
-        const request: RequestInit & { url: string } = {
-            url: this._getExplicityTransactionApi(config?.database!),
-            method: 'POST',
-            mode: 'cors',
-            headers: this._headers(requestCodec),
-            signal: this._abortController.signal,
-            body: JSON.stringify(requestCodec.body)
-        }
-
-        this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
-
-        fetch(request.url, request).
-            then(async (res) => {
-                return [res.headers.get('content-type'), res.headers.get(this._sessionAffinityHeader), (await res.json()) as BeginTransactionResponse]
-            })
-            .catch((error) => this._handleAndReThrown(newError(`Failure accessing "${request.url}"`, 'SERVICE_UNAVAILABLE', error)))
-            .catch((error) => observer.onError(error))
-            .then(async ([contentType, affinity, rawBeginTransactionResponse]: [string, string|null, BeginTransactionResponse]) => {
-                if (rawBeginTransactionResponse == null) {
-                    // is already dead
-                    return
-                }
-                this._log?.debug(`${this} ${JSON.stringify(rawBeginTransactionResponse)}`)
-            
-                const codec = BeginTransactionResponseCodec.of(this._config, contentType, rawBeginTransactionResponse);
-
-                if (codec.error) {
-                    throw codec.error
-                }
-
-                this._currentTx = {
-                    id: codec.id,
-                    host: codec.host,
-                    database: config?.database!,
-                }
-
-                if (affinity != null) {
-                    this._currentTx.affinity = affinity
-                }
-
-                observer.onCompleted({})
+        this._workPipe.attach(() => {
+            const request: RequestInit & { url: string } = {
+                url: this._getExplicityTransactionApi(config?.database!),
+                method: 'POST',
+                mode: 'cors',
+                headers: this._headers(requestCodec),
+                signal: this._abortController?.signal,
+                body: JSON.stringify(requestCodec.body)
+            }
+    
+            this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
+    
+            return fetch(request.url, request).
+                then(async (res) => {
+                    return [res.headers.get('content-type'), res.headers.get(this._sessionAffinityHeader), (await res.json()) as BeginTransactionResponse]
+                })
+                .catch((error) => this._handleAndReThrown(newError(`Failure accessing "${request.url}"`, 'SERVICE_UNAVAILABLE', error)))
+                .catch((error) => observer.onError(error))
+                .then(async ([contentType, affinity, rawBeginTransactionResponse]: [string, string|null, BeginTransactionResponse]) => {
+                    if (rawBeginTransactionResponse == null) {
+                        // is already dead
+                        return
+                    }
+                    this._log?.debug(`${this} ${JSON.stringify(rawBeginTransactionResponse)}`)
                 
-            })
-            .catch(this._handleAndReThrown.bind(this))
-            .catch(error => observer.onError(error))
-            .finally(() => {
-                this._abortController = undefined
-            })
+                    const codec = BeginTransactionResponseCodec.of(this._config, contentType, rawBeginTransactionResponse);
+    
+                    if (codec.error) {
+                        throw codec.error
+                    }
+    
+                    this._currentTx = {
+                        id: codec.id,
+                        host: codec.host,
+                        database: config?.database!,
+                    }
+    
+                    if (affinity != null) {
+                        this._currentTx.affinity = affinity
+                    }
+    
+                    observer.onCompleted({})
+                    
+                })
+                .catch(this._handleAndReThrown.bind(this))
+                .catch(error => {
+                    observer.onError(error)
+                    throw error
+                })
+                .finally(() => {
+                    this._abortController = undefined
+                })
+        })
+
 
         return observer
     }
@@ -242,45 +256,53 @@ export default class HttpConnection extends Connection {
 
         this._abortController = new AbortController()
 
-        const request: RequestInit & { url: string } = {
-            url: this._getTransactionCommitApi(),
-            method: 'POST',
-            mode: 'cors',
-            headers: this._headers(requestCodec),
-            signal: this._abortController.signal,
-        }
-
-        this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
-
-        fetch(request.url, request).
-            then(async (res) => {
-                return [res.headers.get('content-type'), (await res.json()) as CommitTransactionResponse]
-            })
-            .catch((error) => this._handleAndReThrown(newError(`Failure accessing "${request.url}"`, 'SERVICE_UNAVAILABLE', error)))
-            .catch((error) => observer.onError(error))
-            .then(async ([contentType, rawCommitTransactionResponse]: [string, CommitTransactionResponse]) => {
-                if (rawCommitTransactionResponse == null) {
-                    // is already dead
-                    return
-                }
-                this._log?.debug(`${this} ${JSON.stringify(rawCommitTransactionResponse)}`)
-            
-                const codec = CommitTransactionResponseCodec.of(this._config, contentType, rawCommitTransactionResponse);
-
-                if (codec.error) {
-                    throw codec.error
-                }
-
-                this._currentTx = undefined
-
-                observer.onCompleted(codec.meta)
+        this._workPipe.attach(() => {
+            const request: RequestInit & { url: string } = {
+                url: this._getTransactionCommitApi(),
+                method: 'POST',
+                mode: 'cors',
+                headers: this._headers(requestCodec),
+                signal: this._abortController?.signal,
+            }
+    
+            this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
+    
+            return fetch(request.url, request).
+                then(async (res) => {
+                    return [res.headers.get('content-type'), (await res.json()) as CommitTransactionResponse]
+                })
+                .catch((error) => this._handleAndReThrown(newError(`Failure accessing "${request.url}"`, 'SERVICE_UNAVAILABLE', error)))
+                .catch((error) => observer.onError(error))
+                .then(async ([contentType, rawCommitTransactionResponse]: [string, CommitTransactionResponse]) => {
+                    if (rawCommitTransactionResponse == null) {
+                        // is already dead
+                        return
+                    }
+                    this._log?.debug(`${this} ${JSON.stringify(rawCommitTransactionResponse)}`)
                 
-            })
-            .catch(this._handleAndReThrown.bind(this))
-            .catch(error => observer.onError(error))
-            .finally(() => {
-                this._abortController = undefined
-            })
+                    const codec = CommitTransactionResponseCodec.of(this._config, contentType, rawCommitTransactionResponse);
+    
+                    if (codec.error) {
+                        throw codec.error
+                    }
+    
+                    this._currentTx = undefined
+    
+                    observer.onCompleted(codec.meta)
+                    
+                })
+                .catch(this._handleAndReThrown.bind(this))
+                .catch(error => {
+                    observer.onError(error)
+                    throw error
+                })
+                .finally(() => {
+                    this._abortController = undefined
+                })
+
+        })
+
+        
 
         return observer
     }
@@ -302,45 +324,50 @@ export default class HttpConnection extends Connection {
 
         this._abortController = new AbortController()
 
-        const request: RequestInit & { url: string } = {
-            url: this._getTransactionApi(this._currentTx?.database!),
-            method: 'DELETE',
-            mode: 'cors',
-            headers: this._headers(requestCodec),
-            signal: this._abortController.signal,
-        }
-
-        this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
-
-        fetch(request.url, request).
-            then(async (res) => {
-                return [res.headers.get('content-type'), (await res.json()) as RollbackTransactionResponse]
-            })
-            .catch((error) => this._handleAndReThrown(newError(`Failure accessing "${request.url}"`, 'SERVICE_UNAVAILABLE', error)))
-            .catch((error) => observer.onError(error))
-            .then(async ([contentType, rawRollbackTransactionResponse]: [string, RollbackTransactionResponse]) => {
-                if (rawRollbackTransactionResponse == null) {
-                    // is already dead
-                    return
-                }
-                this._log?.debug(`${this} ${JSON.stringify(rawRollbackTransactionResponse)}`)
-            
-                const codec = RollbackTransactionResponseCodec.of(this._config, contentType, rawRollbackTransactionResponse);
-
-                if (codec.error) {
-                    throw codec.error
-                }
-
-                this._currentTx = undefined
-
-                observer.onCompleted(codec.meta)
+        this._workPipe.attach(() => {
+            const request: RequestInit & { url: string } = {
+                url: this._getTransactionApi(this._currentTx?.database!),
+                method: 'DELETE',
+                mode: 'cors',
+                headers: this._headers(requestCodec),
+                signal: this._abortController?.signal,
+            }
+    
+            this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
+    
+            return fetch(request.url, request).
+                then(async (res) => {
+                    return [res.headers.get('content-type'), (await res.json()) as RollbackTransactionResponse]
+                })
+                .catch((error) => this._handleAndReThrown(newError(`Failure accessing "${request.url}"`, 'SERVICE_UNAVAILABLE', error)))
+                .catch((error) => observer.onError(error))
+                .then(async ([contentType, rawRollbackTransactionResponse]: [string, RollbackTransactionResponse]) => {
+                    if (rawRollbackTransactionResponse == null) {
+                        // is already dead
+                        return
+                    }
+                    this._log?.debug(`${this} ${JSON.stringify(rawRollbackTransactionResponse)}`)
                 
-            })
-            .catch(this._handleAndReThrown.bind(this))
-            .catch(error => observer.onError(error))
-            .finally(() => {
-                this._abortController = undefined
-            })
+                    const codec = RollbackTransactionResponseCodec.of(this._config, contentType, rawRollbackTransactionResponse);
+    
+                    if (codec.error) {
+                        throw codec.error
+                    }
+    
+                    this._currentTx = undefined
+    
+                    observer.onCompleted(codec.meta)
+                    
+                })
+                .catch(this._handleAndReThrown.bind(this))
+                .catch(error => {
+                    observer.onError(error)
+                    throw error
+                })
+                .finally(() => {
+                    this._abortController = undefined
+                })
+        })
 
         return observer
     }
@@ -425,9 +452,11 @@ export default class HttpConnection extends Connection {
     async resetAndFlush(): Promise<void> {
         this._abortController?.abort(newError('User aborted operation.'))
         this._currentTx = undefined
+        this._workPipe.recover()
     }
 
     release(): Promise<void> {
+        this._workPipe.recover()
         return this._release()
     }
 
