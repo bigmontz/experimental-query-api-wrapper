@@ -82,6 +82,31 @@ describe('Pipe', () => {
             expect(work).not.toHaveBeenCalled()
         })
 
+        describe('and previous worker consumer catch failure', () => {
+            it.each(successWorkFixture())('should not execute work %s and fail', async (_, func) => {
+                const expectedFailure = new Error('I am the expected failure')
+                const pipe = new Pipe()
+                const work = jest.fn(func)
+                await expect(pipe.attach(previousWorkFunc(expectedFailure)).catch(() => {})).resolves.toBe(undefined)
+    
+                await expect(pipe.attach(work)).rejects.toBe(expectedFailure)
+    
+                expect(work).not.toHaveBeenCalled()
+            })
+
+            it.each(failedWorkFixture())('should report failure on the work %s', async (_, workFactory) => {
+                const expectedFailure = new Error('I am the expected failure')
+                const notExpected = new Error('I am an error that should not happen')
+                const pipe = new Pipe()
+                const work = jest.fn(workFactory(notExpected))
+                await expect(pipe.attach(previousWorkFunc(expectedFailure)).catch(() => {})).resolves.toBe(undefined)
+    
+                await expect(pipe.attach(work)).rejects.toBe(expectedFailure)
+    
+                expect(work).not.toHaveBeenCalled()
+            })
+        })
+
         describe('but chain is recovery', () => {
             it.each(successWorkFixture())('should execute work %s', async (_, func) => {
                 const failure = new Error('I am a failure, but dont bother')
