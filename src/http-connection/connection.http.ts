@@ -145,7 +145,7 @@ export default class HttpConnection extends Connection {
                 .finally(() => {
                     this._abortController = undefined
                 })
-        })
+        }).catch(error => observer.onError(error))
 
         return observer
     }
@@ -233,7 +233,7 @@ export default class HttpConnection extends Connection {
                 .finally(() => {
                     this._abortController = undefined
                 })
-        })
+        }).catch(error => observer.onError(error))
 
 
         return observer
@@ -299,8 +299,7 @@ export default class HttpConnection extends Connection {
                 .finally(() => {
                     this._abortController = undefined
                 })
-
-        })
+        }).catch(error => observer.onError(error))
 
         
 
@@ -367,7 +366,7 @@ export default class HttpConnection extends Connection {
                 .finally(() => {
                     this._abortController = undefined
                 })
-        })
+        }).catch(error => observer.onError(error))
 
         return observer
     }
