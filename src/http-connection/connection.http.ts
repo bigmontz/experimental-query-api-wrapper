@@ -44,7 +44,7 @@ export default class HttpConnection extends Connection {
     private _queryEndpoint: string
     private _address: internal.serverAddress.ServerAddress
     private _config: types.InternalConfig
-    private _abortController?: AbortController
+    private _abortControllers: AbortController[]
     private _log?: internal.logger.Logger
     private _sessionAffinityHeader: string 
     private _id: number
@@ -65,6 +65,7 @@ export default class HttpConnection extends Connection {
         this._open = true
         this._currentTx = undefined
         this._workPipe = new Pipe(config.logger)
+        this._abortControllers = []
         this._sessionAffinityHeader = config.config.httpSessionAffinityHeader ?? 'neo4j-cluster-affinity'
     }
 
@@ -83,7 +84,7 @@ export default class HttpConnection extends Connection {
             config
         )
 
-        this._abortController = new AbortController()
+        const abortController = this._newAbortController()
 
         this._workPipe.attach(async () => {
             const request: RequestInit & { url: string } = {
@@ -91,48 +92,46 @@ export default class HttpConnection extends Connection {
                 method: 'POST',
                 mode: 'cors',
                 headers: this._headers(requestCodec),
-                signal: this._abortController?.signal,
+                signal: abortController.signal,
                 body: JSON.stringify(requestCodec.body)
             }
     
             this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)}`)
 
-            try {
-                const res = await fetch(request.url, request)
-                const { body: rawQueryResponse, headers: [contentType] } = await readBodyAndReaders<RawQueryResponse>(request.url, res, 'content-type')
-                
-                this._log?.debug(`${this} ${JSON.stringify(rawQueryResponse)}`)
-                const batchSize = config?.fetchSize ?? Number.MAX_SAFE_INTEGER
-                const codec = QueryResponseCodec.of(this._config, contentType ?? '', rawQueryResponse);
+            const res = await fetch(request.url, request)
+            const { body: rawQueryResponse, headers: [contentType] } = await readBodyAndReaders<RawQueryResponse>(request.url, res, 'content-type')
+            
+            this._log?.debug(`${this} ${JSON.stringify(rawQueryResponse)}`)
+            const batchSize = config?.fetchSize ?? Number.MAX_SAFE_INTEGER
+            const codec = QueryResponseCodec.of(this._config, contentType ?? '', rawQueryResponse);
 
-                if (codec.error) {
-                    throw codec.error
-                }
-
-                observer.onKeys(codec.keys)
-                const stream = codec.stream()
-
-                while (!observer.completed) {
-                    if (observer.paused) {
-                        await new Promise((resolve) => setTimeout(resolve, 20))
-                        continue
-                    }
-
-                    for (let i = 0; !observer.paused && i < batchSize && !observer.completed; i++) {
-                        const { done, value: rawRecord } = stream.next()
-                        if (!done) {
-                            observer.onNext(rawRecord)
-                        } else {
-                            observer.onCompleted(codec.meta)
-                        }
-                    }
-                }
-
-                observer.onCompleted(codec.meta)
-            } finally {
-                this._abortController = undefined
+            if (codec.error) {
+                throw codec.error
             }
-        }).catch(this._onError(observer))
+
+            observer.onKeys(codec.keys)
+            const stream = codec.stream()
+
+            while (!observer.completed) {
+                if (observer.paused) {
+                    await new Promise((resolve) => setTimeout(resolve, 20))
+                    continue
+                }
+
+                for (let i = 0; !observer.paused && i < batchSize && !observer.completed; i++) {
+                    const { done, value: rawRecord } = stream.next()
+                    if (!done) {
+                        observer.onNext(rawRecord)
+                    } else {
+                        observer.onCompleted(codec.meta)
+                    }
+                }
+            }
+
+            observer.onCompleted(codec.meta)            
+        })
+            .catch(this._catch(observer))
+            .finally(this._finally(abortController))
 
         return observer
     }
@@ -166,7 +165,7 @@ export default class HttpConnection extends Connection {
             config
         )
 
-        this._abortController = new AbortController()
+        const abortController = this._newAbortController()
 
         this._workPipe.attach(async () => {
             const request: RequestInit & { url: string } = {
@@ -174,42 +173,41 @@ export default class HttpConnection extends Connection {
                 method: 'POST',
                 mode: 'cors',
                 headers: this._headers(requestCodec),
-                signal: this._abortController?.signal,
+                signal: abortController.signal,
                 body: JSON.stringify(requestCodec.body)
             }
     
             this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
 
-            try {
-                const res = await fetch(request.url, request) 
-                const {
-                    body: rawBeginTransactionResponse,
-                    headers: [contentType, affinity]
-                } = await readBodyAndReaders<BeginTransactionResponse>(request.url, res, 'content-type', this._sessionAffinityHeader)
+            const res = await fetch(request.url, request) 
+            const {
+                body: rawBeginTransactionResponse,
+                headers: [contentType, affinity]
+            } = await readBodyAndReaders<BeginTransactionResponse>(request.url, res, 'content-type', this._sessionAffinityHeader)
 
-                this._log?.debug(`${this} ${JSON.stringify(rawBeginTransactionResponse)}`)
-                
-                const codec = BeginTransactionResponseCodec.of(this._config, contentType ?? '', rawBeginTransactionResponse);
+            this._log?.debug(`${this} ${JSON.stringify(rawBeginTransactionResponse)}`)
+            
+            const codec = BeginTransactionResponseCodec.of(this._config, contentType ?? '', rawBeginTransactionResponse);
 
-                if (codec.error) {
-                    throw codec.error
-                }
-
-                this._currentTx = {
-                    id: codec.id,
-                    host: codec.host,
-                    database: config?.database!,
-                }
-
-                if (affinity != null) {
-                    this._currentTx.affinity = affinity
-                }
-
-                observer.onCompleted({})
-            } finally {
-                this._abortController = undefined
+            if (codec.error) {
+                throw codec.error
             }
-        }).catch(this._onError(observer))
+
+            this._currentTx = {
+                id: codec.id,
+                host: codec.host,
+                database: config?.database!,
+            }
+
+            if (affinity != null) {
+                this._currentTx.affinity = affinity
+            }
+
+            observer.onCompleted({})
+        
+        })
+            .catch(this._catch(observer))
+            .finally(this._finally(abortController))
 
         return observer
     }
@@ -229,7 +227,7 @@ export default class HttpConnection extends Connection {
             config
         )
 
-        this._abortController = new AbortController()
+        const abortController = this._newAbortController()
 
         this._workPipe.attach(async () => {
             const request: RequestInit & { url: string } = {
@@ -237,34 +235,31 @@ export default class HttpConnection extends Connection {
                 method: 'POST',
                 mode: 'cors',
                 headers: this._headers(requestCodec),
-                signal: this._abortController?.signal,
+                signal: abortController.signal,
             }
     
             this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
 
-            try  {
-                const res = await fetch(request.url, request)
-                const {
-                    body: rawCommitTransactionResponse,
-                    headers: [contentType]
-                } = await readBodyAndReaders<CommitTransactionResponse>(request.url, res, 'contentType')
+            const res = await fetch(request.url, request)
+            const {
+                body: rawCommitTransactionResponse,
+                headers: [contentType]
+            } = await readBodyAndReaders<CommitTransactionResponse>(request.url, res, 'contentType')
 
-                this._log?.debug(`${this} ${JSON.stringify(rawCommitTransactionResponse)}`)
-                
-                const codec = CommitTransactionResponseCodec.of(this._config, contentType ?? '', rawCommitTransactionResponse);
+            this._log?.debug(`${this} ${JSON.stringify(rawCommitTransactionResponse)}`)
+            
+            const codec = CommitTransactionResponseCodec.of(this._config, contentType ?? '', rawCommitTransactionResponse);
 
-                if (codec.error) {
-                    throw codec.error
-                }
-
-                this._currentTx = undefined
-
-                observer.onCompleted(codec.meta)
-
-            } finally {
-                this._abortController = undefined
+            if (codec.error) {
+                throw codec.error
             }
-        }).catch(this._onError(observer))
+
+            this._currentTx = undefined
+
+            observer.onCompleted(codec.meta)
+        })
+            .catch(this._catch(observer))
+            .finally(this._finally(abortController))
 
         return observer
     }
@@ -284,7 +279,7 @@ export default class HttpConnection extends Connection {
             config
         )
 
-        this._abortController = new AbortController()
+        const abortController = this._newAbortController()
 
         this._workPipe.attach(async () => {
             const request: RequestInit & { url: string } = {
@@ -292,35 +287,33 @@ export default class HttpConnection extends Connection {
                 method: 'DELETE',
                 mode: 'cors',
                 headers: this._headers(requestCodec),
-                signal: this._abortController?.signal,
+                signal: abortController.signal,
             }
     
             this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
 
-            try {
-                const res = await fetch(request.url, request)
-                const {
-                    body: rawRollbackTransactionResponse,
-                    headers: [
-                        contentType
-                    ]
-                } = await readBodyAndReaders<RollbackTransactionResponse>(request.url, res, 'content-type')
+            const res = await fetch(request.url, request)
+            const {
+                body: rawRollbackTransactionResponse,
+                headers: [
+                    contentType
+                ]
+            } = await readBodyAndReaders<RollbackTransactionResponse>(request.url, res, 'content-type')
 
-                this._log?.debug(`${this} ${JSON.stringify(rawRollbackTransactionResponse)}`)
-                
-                const codec = RollbackTransactionResponseCodec.of(this._config, contentType ?? '', rawRollbackTransactionResponse);
+            this._log?.debug(`${this} ${JSON.stringify(rawRollbackTransactionResponse)}`)
+            
+            const codec = RollbackTransactionResponseCodec.of(this._config, contentType ?? '', rawRollbackTransactionResponse);
 
-                if (codec.error) {
-                    throw codec.error
-                }
-
-                this._currentTx = undefined
-
-                observer.onCompleted(codec.meta)
-            } finally {
-                this._abortController = undefined
+            if (codec.error) {
+                throw codec.error
             }
-        }).catch(this._onError(observer))
+
+            this._currentTx = undefined
+
+            observer.onCompleted(codec.meta)
+        })
+            .catch(this._catch(observer))
+            .finally(this._finally(abortController))
 
         return observer
     }
@@ -399,11 +392,12 @@ export default class HttpConnection extends Connection {
     }
 
     hasOngoingObservableRequests(): boolean {
-        return this._abortController != null
+        return this._abortControllers.length > 0
     }
 
     async resetAndFlush(): Promise<void> {
-        this._abortController?.abort(newError('User aborted operation.'))
+        this._abortControllers.forEach((controller) => controller.abort(newError('User aborted operation.')))
+        this._abortControllers = []
         this._currentTx = undefined
         this._workPipe.recover()
     }
@@ -414,7 +408,8 @@ export default class HttpConnection extends Connection {
     }
 
     async close(): Promise<void> {
-        this._abortController?.abort(newError('Aborted since connection is being closed.'))
+        this._abortControllers.forEach((controller) => controller.abort(newError('Aborted since connection is being closed.')))
+        this._abortControllers = []
         this._open = false
     }
 
@@ -422,12 +417,23 @@ export default class HttpConnection extends Connection {
         return `HttpConnection [${this._id}]`
     }
 
-    private _onError(observer: ResultStreamObserver): (error: any) => void {
+    private _catch(observer: ResultStreamObserver): (error: any) => void {
         return error => {
             this._currentTx = undefined
             const newError = this._errorHandler(error)
             observer.onError(newError)
         }
+    }
+
+    private _finally(abortController: AbortController): (() => void) | null | undefined {
+        this._abortControllers = this._abortControllers.filter(ac => ac !== abortController)
+        return undefined
+    }
+
+    private _newAbortController (): AbortController {
+        const abortController = new AbortController()
+        this._abortControllers.push(abortController)
+        return abortController
     }
 }
 
