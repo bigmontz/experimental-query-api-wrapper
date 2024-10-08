@@ -74,6 +74,7 @@ export default class HttpConnection extends Connection {
             highRecordWatermark: config?.highRecordWatermark ?? Number.MAX_SAFE_INTEGER,
             lowRecordWatermark: config?.lowRecordWatermark ?? Number.MIN_SAFE_INTEGER,
             afterComplete: config?.afterComplete,
+            beforeError: config?.beforeError,
             server: this._address,
         })
 
@@ -154,6 +155,7 @@ export default class HttpConnection extends Connection {
         const observer = new ResultStreamObserver({
             server: this._address,
             afterComplete: config?.afterComplete,
+            beforeError: config.beforeError,
             highRecordWatermark: Number.MAX_SAFE_INTEGER,
             lowRecordWatermark: Number.MIN_SAFE_INTEGER,
           })
@@ -216,6 +218,7 @@ export default class HttpConnection extends Connection {
         const observer = new ResultStreamObserver({
             server: this._address,
             afterComplete: config?.afterComplete,
+            beforeError: config.beforeError,
             highRecordWatermark: Number.MAX_SAFE_INTEGER,
             lowRecordWatermark: Number.MIN_SAFE_INTEGER,
           })
@@ -268,6 +271,7 @@ export default class HttpConnection extends Connection {
         const observer = new ResultStreamObserver({
             server: this._address,
             afterComplete: config?.afterComplete,
+            beforeError: config.beforeError,
             highRecordWatermark: Number.MAX_SAFE_INTEGER,
             lowRecordWatermark: Number.MIN_SAFE_INTEGER,
           })
@@ -318,26 +322,21 @@ export default class HttpConnection extends Connection {
         return observer
     }
 
-    private _handleAndReThrown(error: Error & { code: string, retriable: boolean }): Error {
-        this._currentTx = undefined
-        throw this._errorHandler(error)
-    }
-
     private _getTransactionApi(database: string): string {
         if (this._currentTx === undefined) {
             return this._queryEndpoint.replace('{databaseName}', database)
         }
         // TODO: ADD HOST
-        return this._queryEndpoint.replace('{databaseName}',  this._currentTx.database) + `/tx/${this._currentTx.id}`
+        return this._queryEndpoint.replace('{databaseName}',  this._currentTx.database) + `tx/${this._currentTx.id}`
     }
 
     private _getTransactionCommitApi(): string {
         // TODO: ADD HOST
-        return this._queryEndpoint.replace('{databaseName}', this._currentTx?.database!) + `/tx/${this._currentTx?.id}/commit`
+        return this._queryEndpoint.replace('{databaseName}', this._currentTx?.database!) + `tx/${this._currentTx?.id}/commit`
     }
 
     private _getExplicityTransactionApi(database: string): string {
-        return this._queryEndpoint.replace('{databaseName}', database) + '/tx'
+        return this._queryEndpoint.replace('{databaseName}', database) + 'tx'
     }
 
     static async discover({ scheme, address }: { scheme: HttpScheme, address: internal.serverAddress.ServerAddress }): Promise<{

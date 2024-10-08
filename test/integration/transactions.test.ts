@@ -19,7 +19,7 @@ import config from './config'
 import { when, withSession } from './test.utils'
 import neo4j, { Wrapper } from '../../src'
 
-when(config.version >= 5.26, () => describe('transactions', () => {
+when(config.version >= 5.25, () => describe('transactions', () => {
   let wrapper: Wrapper
 
   beforeAll(async () => {
