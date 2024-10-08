@@ -17,14 +17,13 @@
 
 import { error, newError, types } from "neo4j-driver-core"
 import { BeginTransactionConfig } from "neo4j-driver-core/types/connection"
+import { NEO4J_QUERY_CONTENT_TYPE, encodeAuthToken, encodeTransactionBody } from "./codec"
 
 export type BeginTransactionRequestCodecConfig = Pick<BeginTransactionConfig, 'bookmarks' | 'txConfig' | 'mode' | 'impersonatedUser'>
 export type CommitTransactionRequestCodecConfig = {}
 export type RollbackTransactionRequestCodecConfig = {}
 
 
-// TODO: EXTRACT COMMON
-const NEO4J_QUERY_CONTENT_TYPE = 'application/vnd.neo4j.query'
 
 export type RawTransaction = {
     id: string
@@ -66,49 +65,23 @@ export class BeginTransactionRequestCodec {
     }
 
     get contentType (): string {
-        return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
+        return NEO4J_QUERY_CONTENT_TYPE
     }
 
     get accept (): string {
-        // TODO: verify accept type
-        return 'application/json'
+        return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
     }
 
     get authorization(): string {
-        // TODO: Move shared logic to common file.
-        switch (this._auth.scheme) {
-            case 'bearer':
-                return `Bearer ${btoa(this._auth.credentials)}`
-            case 'basic':
-                return `Basic ${btoa(`${this._auth.principal}:${this._auth.credentials}`)}`
-            default:
-                throw new Error(`Authorization scheme "${this._auth.scheme}" is not supported.`)
-        }
+        return encodeAuthToken(this._auth)
     }
 
     get body (): Record<string, unknown> {
-        // TODO: MOVE COMMON LOGIC TO COMMON PLACE, MAYBE
         if (this._body != null) {
             return this._body
         }
 
-        this._body = {}
-
-        if (this._config?.bookmarks != null && !this._config.bookmarks.isEmpty()) {
-            this._body.bookmarks = this._config?.bookmarks?.values()
-        }
-
-        if (this._config?.txConfig.timeout != null) {
-            this._body.maxExecutionTime = this._config?.txConfig.timeout.toInt()
-        }
-
-        if (this._config?.impersonatedUser != null) {
-            this._body.impersonatedUser = this._config?.impersonatedUser
-        }
-
-        if (this._config?.mode) {
-            this._body.accessMode = this._config.mode.toUpperCase()
-        }
+        this._body = encodeTransactionBody(this._config)
 
         return this._body
     }
@@ -220,24 +193,15 @@ export class CommitTransactionRequestCodec {
     }
 
     get contentType (): string {
-        return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
-    }
-
-    get accept (): string {
-        // TODO: verify accept type
         return 'application/json'
     }
 
+    get accept (): string {
+        return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
+    }
+
     get authorization(): string {
-        // TODO: Move shared logic to common file.
-        switch (this._auth.scheme) {
-            case 'bearer':
-                return `Bearer ${btoa(this._auth.credentials)}`
-            case 'basic':
-                return `Basic ${btoa(`${this._auth.principal}:${this._auth.credentials}`)}`
-            default:
-                throw new Error(`Authorization scheme "${this._auth.scheme}" is not supported.`)
-        }
+        return encodeAuthToken(this._auth)
     }
 }
 
@@ -324,24 +288,15 @@ export class RollbackTransactionRequestCodec {
     }
 
     get contentType (): string {
-        return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
-    }
-
-    get accept (): string {
-        // TODO: verify accept type
         return 'application/json'
     }
 
+    get accept (): string {
+        return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
+    }
+
     get authorization(): string {
-        // TODO: Move shared logic to common file.
-        switch (this._auth.scheme) {
-            case 'bearer':
-                return `Bearer ${btoa(this._auth.credentials)}`
-            case 'basic':
-                return `Basic ${btoa(`${this._auth.principal}:${this._auth.credentials}`)}`
-            default:
-                throw new Error(`Authorization scheme "${this._auth.scheme}" is not supported.`)
-        }
+        return encodeAuthToken(this._auth)
     }
 }
 
