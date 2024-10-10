@@ -29,10 +29,10 @@ const DEFAULT_AUTH = auth.basic('neo4j', 'password')
 
 describe('BeginTransactionRequestCodec', () => { 
     describe('.contentType', () => {
-        it('should return "application/vnd.neo4j.query"', () => {
+        it('should return "application/json"', () => {
             const codec = subject()
 
-            expect(codec.contentType).toBe('application/vnd.neo4j.query')
+            expect(codec.contentType).toBe('application/json')
         })
     })
 
@@ -82,10 +82,10 @@ describe('BeginTransactionRequestCodec', () => {
 
 describe('CommitTransactionRequestCodec', () => { 
     describe('.contentType', () => {
-        it('should return "application/vnd.neo4j.query"', () => {
+        it('should return "application/json"', () => {
             const codec = subject()
 
-            expect(codec.contentType).toBe('application/vnd.neo4j.query')
+            expect(codec.contentType).toBe('application/json')
         })
     })
 
@@ -135,10 +135,10 @@ describe('CommitTransactionRequestCodec', () => {
 
 describe('RollbackTransactionRequestCodec', () => { 
     describe('.contentType', () => {
-        it('should return "application/vnd.neo4j.query"', () => {
+        it('should return "application/json"', () => {
             const codec = subject()
 
-            expect(codec.contentType).toBe('application/vnd.neo4j.query')
+            expect(codec.contentType).toBe('application/json')
         })
     })
 

@@ -65,7 +65,7 @@ export class BeginTransactionRequestCodec {
     }
 
     get contentType (): string {
-        return NEO4J_QUERY_CONTENT_TYPE
+        return 'application/json'
     }
 
     get accept (): string {
@@ -193,7 +193,7 @@ export class CommitTransactionRequestCodec {
     }
 
     get contentType (): string {
-        return NEO4J_QUERY_CONTENT_TYPE
+        return 'application/json'
     }
 
     get accept (): string {
@@ -288,7 +288,7 @@ export class RollbackTransactionRequestCodec {
     }
 
     get contentType (): string {
-        return NEO4J_QUERY_CONTENT_TYPE
+        return 'application/json'
     }
 
     get accept (): string {
