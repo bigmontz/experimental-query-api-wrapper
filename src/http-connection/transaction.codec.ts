@@ -23,8 +23,6 @@ export type BeginTransactionRequestCodecConfig = Pick<BeginTransactionConfig, 'b
 export type CommitTransactionRequestCodecConfig = {}
 export type RollbackTransactionRequestCodecConfig = {}
 
-
-
 export type RawTransaction = {
     id: string
     expires: number
@@ -45,7 +43,7 @@ export type RawTransactionFailuresResponse = {
     errors: RawTransactionError[]
 }
 
-export type BeginTransactionResponse = RawBeginTransactionSuccessResponse | RawTransactionFailuresResponse 
+export type RawBeginTransactionResponse = RawBeginTransactionSuccessResponse | RawTransactionFailuresResponse 
 
 export class BeginTransactionRequestCodec {
     private _body?: Record<string, unknown>
@@ -91,7 +89,7 @@ export class BeginTransactionResponseCodec {
     static of(
         config: types.InternalConfig,
         contentType: string,
-        response: BeginTransactionResponse): BeginTransactionResponseCodec {
+        response: RawBeginTransactionResponse): BeginTransactionResponseCodec {
         if (isSuccess(response)) {
             return new BeginTransactionSuccessResponseCodec(config, response)
         }
@@ -174,7 +172,7 @@ export type RawCommitTransactionSuccessResponse = {
     bookmarks: string[] | undefined
 }
 
-export type CommitTransactionResponse = RawCommitTransactionSuccessResponse | RawTransactionFailuresResponse 
+export type RawCommitTransactionResponse = RawCommitTransactionSuccessResponse | RawTransactionFailuresResponse 
 
 
 export class CommitTransactionRequestCodec {
@@ -213,7 +211,7 @@ export class CommitTransactionResponseCodec {
     static of(
         config: types.InternalConfig,
         contentType: string,
-        response: CommitTransactionResponse): CommitTransactionResponseCodec {
+        response: RawCommitTransactionResponse): CommitTransactionResponseCodec {
         if (isCommitSuccess(response)) {
             return new CommitTransactionSuccessResponseCodec(config, response)
         }
@@ -270,10 +268,10 @@ class CommitTransactionFailureResponseCodec extends CommitTransactionResponseCod
 }
 
 export type RawRollbackTransactionSuccessResponse = {
-    e: any
+    e?: any
 }
 
-export type RollbackTransactionResponse = RawRollbackTransactionSuccessResponse | RawTransactionFailuresResponse 
+export type RawRollbackTransactionResponse = RawRollbackTransactionSuccessResponse | RawTransactionFailuresResponse 
 
 
 export class RollbackTransactionRequestCodec {
@@ -312,7 +310,7 @@ export class RollbackTransactionResponseCodec {
     static of(
         config: types.InternalConfig,
         contentType: string,
-        response: RollbackTransactionResponse): RollbackTransactionResponseCodec {
+        response: RawRollbackTransactionResponse): RollbackTransactionResponseCodec {
         if (isRollbackSuccess(response)) {
             return new RollbackTransactionSuccessResponseCodec(config, response)
         }
@@ -367,7 +365,7 @@ class RollbackTransactionFailureResponseCodec extends RollbackTransactionRespons
     }
 }
 
-function isSuccess(obj: BeginTransactionResponse): obj is RawBeginTransactionSuccessResponse {
+function isSuccess(obj: RawBeginTransactionResponse): obj is RawBeginTransactionSuccessResponse {
     // @ts-expect-error
     if (obj.errors != null) {
         return false
@@ -375,7 +373,7 @@ function isSuccess(obj: BeginTransactionResponse): obj is RawBeginTransactionSuc
     return true
 }
 
-function isCommitSuccess(obj: CommitTransactionResponse): obj is RawCommitTransactionSuccessResponse {
+function isCommitSuccess(obj: RawCommitTransactionResponse): obj is RawCommitTransactionSuccessResponse {
     // @ts-expect-error
     if (obj.errors != null) {
         return false
@@ -383,7 +381,7 @@ function isCommitSuccess(obj: CommitTransactionResponse): obj is RawCommitTransa
     return true
 }
 
-function isRollbackSuccess(obj: RollbackTransactionResponse): obj is RawRollbackTransactionSuccessResponse {
+function isRollbackSuccess(obj: RawRollbackTransactionResponse): obj is RawRollbackTransactionSuccessResponse {
     // @ts-expect-error
     if (obj.errors != null) {
         return false

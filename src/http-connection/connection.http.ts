@@ -19,7 +19,7 @@ import { Connection, types, internal, newError } from "neo4j-driver-core"
 import { BeginTransactionConfig, CommitTransactionConfig, RunQueryConfig } from "neo4j-driver-core/types/connection"
 import { ResultStreamObserver } from "./stream-observers"
 import { QueryRequestCodec, QueryResponseCodec, RawQueryResponse } from "./query.codec"
-import { BeginTransactionRequestCodec, BeginTransactionResponse, BeginTransactionResponseCodec, CommitTransactionRequestCodec, CommitTransactionResponse, CommitTransactionResponseCodec, RollbackTransactionRequestCodec, RollbackTransactionResponse, RollbackTransactionResponseCodec } from "./transaction.codec"
+import { BeginTransactionRequestCodec, RawBeginTransactionResponse, BeginTransactionResponseCodec, CommitTransactionRequestCodec, RawCommitTransactionResponse, CommitTransactionResponseCodec, RollbackTransactionRequestCodec, RawRollbackTransactionResponse, RollbackTransactionResponseCodec } from "./transaction.codec"
 import { WrapperConfig } from "../types"
 import Pipe from "./lang/pipe"
 
@@ -189,13 +189,13 @@ export default class HttpConnection extends Connection {
             const {
                 body: rawBeginTransactionResponse,
                 headers: [contentType, affinity]
-            } = await readBodyAndReaders<BeginTransactionResponse>(request.url, res, 'content-type', this._sessionAffinityHeader)
+            } = await readBodyAndReaders<RawBeginTransactionResponse>(request.url, res, 'content-type', this._sessionAffinityHeader)
 
             this._log?.debug(`${this} ${JSON.stringify(rawBeginTransactionResponse)}`)
             
             const codec = BeginTransactionResponseCodec.of(this._config, contentType ?? '', rawBeginTransactionResponse);
 
-            if (codec.error) {
+            if (codec.error != null) {
                 throw codec.error
             }
 
@@ -252,7 +252,7 @@ export default class HttpConnection extends Connection {
             const {
                 body: rawCommitTransactionResponse,
                 headers: [contentType]
-            } = await readBodyAndReaders<CommitTransactionResponse>(request.url, res, 'contentType')
+            } = await readBodyAndReaders<RawCommitTransactionResponse>(request.url, res, 'contentType')
 
             this._log?.debug(`${this} ${JSON.stringify(rawCommitTransactionResponse)}`)
             
@@ -308,7 +308,7 @@ export default class HttpConnection extends Connection {
                 headers: [
                     contentType
                 ]
-            } = await readBodyAndReaders<RollbackTransactionResponse>(request.url, res, 'content-type')
+            } = await readBodyAndReaders<RawRollbackTransactionResponse>(request.url, res, 'content-type')
 
             this._log?.debug(`${this} ${JSON.stringify(rawRollbackTransactionResponse)}`)
             

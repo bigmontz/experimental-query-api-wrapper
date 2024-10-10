@@ -18,11 +18,18 @@ import { auth, types, internal, int } from "neo4j-driver-core"
 import { 
     BeginTransactionRequestCodec, 
     BeginTransactionRequestCodecConfig,
+    BeginTransactionResponseCodec,
     CommitTransactionRequestCodec,
     CommitTransactionRequestCodecConfig, 
+    CommitTransactionResponseCodec, 
+    RawBeginTransactionResponse, 
+    RawCommitTransactionResponse, 
+    RawRollbackTransactionResponse, 
     RollbackTransactionRequestCodec,
-    RollbackTransactionRequestCodecConfig 
+    RollbackTransactionRequestCodecConfig, 
+    RollbackTransactionResponseCodec
 } from "../../../src/http-connection/transaction.codec"
+import { NEO4J_QUERY_CONTENT_TYPE } from "../../../src/http-connection/codec"
 
 const DEFAULT_AUTH = auth.basic('neo4j', 'password')
 
@@ -152,6 +159,110 @@ describe('BeginTransactionRequestCodec', () => {
     }
 })
 
+describe('BeginTransactionResponseCodec', () => {
+    const DEFAULT_CONTENT_TYPE = NEO4J_QUERY_CONTENT_TYPE
+    const DEFAULT_RAW_RESPONSE = {
+        transaction: {
+            id: 'abc',
+            expires: 3000
+        }
+    }
+
+    describe('.id', () => {
+        it('should handle success', () => {
+            const codec = subject()
+
+            expect(codec.id).toBe(DEFAULT_RAW_RESPONSE.transaction.id)
+        })
+
+        it('should handle failures', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: [{
+                        message: 'Something wrong is mighty right',
+                        code: 'Neo.ClientError.Made.Up'
+                    }]
+                }
+            })
+
+            expect(() => codec.id).toThrow(codec.error)
+        })
+    })
+
+    describe('.expires', () => {
+        it('should handle success', () => {
+            const codec = subject()
+
+            expect(codec.expires).toBe(DEFAULT_RAW_RESPONSE.transaction.expires)
+        })
+
+        it('should handle failures', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: [{
+                        message: 'Something wrong is mighty right',
+                        code: 'Neo.ClientError.Made.Up'
+                    }]
+                }
+            })
+
+            expect(() => codec.expires).toThrow(codec.error)
+        })
+    })
+
+    describe('.error', () => {
+        it('should handle success', () => {
+            const codec = subject()
+
+            expect(codec.error).toBe(undefined)
+        })
+
+
+        it('should handle failures', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: [{
+                        message: 'Something wrong is mighty right',
+                        code: 'Neo.ClientError.Made.Up'
+                    }]
+                }
+            })
+
+            expect(codec.error).toBeDefined()
+            expect(codec.error?.message).toEqual('Something wrong is mighty right')
+            // @ts-expect-error
+            expect(codec.error?.code).toEqual('Neo.ClientError.Made.Up')
+        })
+
+        it('should handle empty error list', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: []
+                }
+            })
+
+            expect(codec.error).toBeDefined()
+            expect(codec.error?.message).toEqual('Server replied an empty error response')
+            // @ts-expect-error
+            expect(codec.error?.code).toEqual('ProtocolError')
+        })
+    })
+
+    type SubjectParams = Partial<{
+        config: types.InternalConfig,
+        contentType: string,
+        rawQueryResponse: RawBeginTransactionResponse
+    }>
+
+    function subject(param?: SubjectParams) {
+        return BeginTransactionResponseCodec.of(
+            { ...param?.config },
+            param?.contentType ?? DEFAULT_CONTENT_TYPE,
+            param?.rawQueryResponse ?? DEFAULT_RAW_RESPONSE
+        )
+    }
+})
+
 describe('CommitTransactionRequestCodec', () => { 
     describe('.contentType', () => {
         it('should return "application/json"', () => {
@@ -221,6 +332,94 @@ describe('CommitTransactionRequestCodec', () => {
     }
 })
 
+describe('CommitTransactionResponseCodec', () => {
+    const DEFAULT_CONTENT_TYPE = NEO4J_QUERY_CONTENT_TYPE
+    const DEFAULT_RAW_RESPONSE = {
+        bookmarks: ['abc']
+    }
+
+    describe('.meta', () => {
+        it.each([
+            [undefined],
+            [[]],
+            [['single']],
+            [['double', 'ones']]
+        ])('should handle success %s', (bookmarks) => {
+            const codec = subject({ rawQueryResponse: { bookmarks }})
+
+            expect(codec.meta).toEqual({
+                bookmarks
+            })
+        })
+
+        it('should handle failures', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: [{
+                        message: 'Something wrong is mighty right',
+                        code: 'Neo.ClientError.Made.Up'
+                    }]
+                }
+            })
+
+            expect(() => codec.meta).toThrow(codec.error)
+        })
+    })
+
+    
+    describe('.error', () => {
+        it('should handle success', () => {
+            const codec = subject()
+
+            expect(codec.error).toBe(undefined)
+        })
+
+
+        it('should handle failures', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: [{
+                        message: 'Something wrong is mighty right',
+                        code: 'Neo.ClientError.Made.Up'
+                    }]
+                }
+            })
+
+            expect(codec.error).toBeDefined()
+            expect(codec.error?.message).toEqual('Something wrong is mighty right')
+            // @ts-expect-error
+            expect(codec.error?.code).toEqual('Neo.ClientError.Made.Up')
+        })
+
+        it('should handle empty error list', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: []
+                }
+            })
+
+            expect(codec.error).toBeDefined()
+            expect(codec.error?.message).toEqual('Server replied an empty error response')
+            // @ts-expect-error
+            expect(codec.error?.code).toEqual('ProtocolError')
+        })
+    })
+
+    type SubjectParams = Partial<{
+        config: types.InternalConfig,
+        contentType: string,
+        rawQueryResponse: RawCommitTransactionResponse
+    }>
+
+    function subject(param?: SubjectParams) {
+        return CommitTransactionResponseCodec.of(
+            { ...param?.config },
+            param?.contentType ?? DEFAULT_CONTENT_TYPE,
+            param?.rawQueryResponse ?? DEFAULT_RAW_RESPONSE
+        )
+    }
+})
+
 describe('RollbackTransactionRequestCodec', () => { 
     describe('.contentType', () => {
         it('should return "application/json"', () => {
@@ -285,6 +484,85 @@ describe('RollbackTransactionRequestCodec', () => {
         return RollbackTransactionRequestCodec.of(
             params?.auth ?? DEFAULT_AUTH,
             params?.config
+        )
+    }
+})
+
+describe('RollbackTransactionResponseCodec', () => {
+    const DEFAULT_CONTENT_TYPE = NEO4J_QUERY_CONTENT_TYPE
+    const DEFAULT_RAW_RESPONSE = {}
+
+    describe('.meta', () => {
+        it('should handle success', () => {
+            const codec = subject()
+
+            expect(codec.meta).toEqual({})
+        })
+
+        it('should handle failures', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: [{
+                        message: 'Something wrong is mighty right',
+                        code: 'Neo.ClientError.Made.Up'
+                    }]
+                }
+            })
+
+            expect(() => codec.meta).toThrow(codec.error)
+        })
+    })
+
+    
+    describe('.error', () => {
+        it('should handle success', () => {
+            const codec = subject()
+
+            expect(codec.error).toBe(undefined)
+        })
+
+
+        it('should handle failures', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: [{
+                        message: 'Something wrong is mighty right',
+                        code: 'Neo.ClientError.Made.Up'
+                    }]
+                }
+            })
+
+            expect(codec.error).toBeDefined()
+            expect(codec.error?.message).toEqual('Something wrong is mighty right')
+            // @ts-expect-error
+            expect(codec.error?.code).toEqual('Neo.ClientError.Made.Up')
+        })
+
+        it('should handle empty error list', () => {
+            const codec = subject({
+                rawQueryResponse: {
+                    errors: []
+                }
+            })
+
+            expect(codec.error).toBeDefined()
+            expect(codec.error?.message).toEqual('Server replied an empty error response')
+            // @ts-expect-error
+            expect(codec.error?.code).toEqual('ProtocolError')
+        })
+    })
+
+    type SubjectParams = Partial<{
+        config: types.InternalConfig,
+        contentType: string,
+        rawQueryResponse: RawRollbackTransactionResponse
+    }>
+
+    function subject(param?: SubjectParams) {
+        return RollbackTransactionResponseCodec.of(
+            { ...param?.config },
+            param?.contentType ?? DEFAULT_CONTENT_TYPE,
+            param?.rawQueryResponse ?? DEFAULT_RAW_RESPONSE
         )
     }
 })

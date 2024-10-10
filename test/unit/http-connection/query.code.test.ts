@@ -212,8 +212,6 @@ describe('QueryRequestCodec', () => {
 
     })
 
-
-
     function subject(params?: Partial<{
         auth: types.AuthToken,
         query: string,
