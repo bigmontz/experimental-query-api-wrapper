@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { auth, types } from "neo4j-driver-core"
+import { auth, types, internal, int } from "neo4j-driver-core"
 import { 
     BeginTransactionRequestCodec, 
     BeginTransactionRequestCodecConfig,
@@ -64,6 +64,78 @@ describe('BeginTransactionRequestCodec', () => {
             const codec = subject({ auth })
 
             expect(() => codec.authorization).toThrow(`Authorization scheme "${auth.scheme}" is not supported.`)
+        })
+    })
+
+    describe('.body', () => {
+        const DEFAULT_BODY = {}
+
+        it.each([
+            ['single bookmark as string', v('abc', ['abc'])],
+            ['empty', v([], () => undefined)],
+            ['single in a array', v(['abc'])],
+            ['multiples', v(['abc', 'cbd'])],
+        ])('should handle bookmark %s', (_, [bookmarks, expectedBookmarks]) => {
+            const codec = subject({
+                config: {
+                    bookmarks: new internal.bookmarks.Bookmarks(bookmarks),
+                    txConfig: internal.txConfig.TxConfig.empty()
+                }
+            })
+
+            expect(codec.body).toEqual({
+                ...DEFAULT_BODY,
+                bookmarks: expectedBookmarks
+            })
+        })
+
+        it('should handle tx timeout', () => {
+            const codec = subject({
+                config: {
+                    txConfig: new internal.txConfig.TxConfig({
+                        timeout: int(1234)
+                    }),
+                    bookmarks: internal.bookmarks.Bookmarks.empty()
+                }
+            })
+
+            expect(codec.body).toEqual({
+                ...DEFAULT_BODY,
+                maxExecutionTime: 1234
+            })
+        })
+
+        it('should handle impersonatedUser', () => {
+            const codec = subject({
+                config: {
+                    impersonatedUser: 'max',
+                    txConfig: internal.txConfig.TxConfig.empty(),
+                    bookmarks: internal.bookmarks.Bookmarks.empty()
+                }
+            })
+
+            expect(codec.body).toEqual({
+                ...DEFAULT_BODY,
+                impersonatedUser: 'max'
+            })
+        })
+
+        it.each([
+            ['READ'],
+            ['WRITE']
+        ])('should handle config mode %s', (mode: any) => {
+            const codec = subject({
+                config: {
+                    mode,
+                    txConfig: internal.txConfig.TxConfig.empty(),
+                    bookmarks: internal.bookmarks.Bookmarks.empty()
+                }
+            })
+
+            expect(codec.body).toEqual({
+                ...DEFAULT_BODY,
+                accessMode: mode
+            })
         })
     })
 
@@ -120,6 +192,22 @@ describe('CommitTransactionRequestCodec', () => {
         })
     })
 
+    describe('.body', () => {
+        const DEFAULT_BODY = {}
+
+        it('should return default body', () => {
+            const codec = subject({
+                config: {
+
+                }
+            })
+
+            expect(codec.body).toEqual({
+                ...DEFAULT_BODY
+            })
+        })
+    })
+
     function subject(params?: Partial<{
         auth: types.AuthToken,
         query: string,
@@ -173,6 +261,21 @@ describe('RollbackTransactionRequestCodec', () => {
         })
     })
 
+    describe('.body', () => {
+        const DEFAULT_BODY = {}
+
+        it('should return default body', () => {
+            const codec = subject({
+                config: {
+                }
+            })
+
+            expect(codec.body).toEqual({
+                ...DEFAULT_BODY
+            })
+        })
+    })
+
     function subject(params?: Partial<{
         auth: types.AuthToken,
         query: string,
@@ -185,3 +288,12 @@ describe('RollbackTransactionRequestCodec', () => {
         )
     }
 })
+
+function v<T, K = T>(value: T, expected?: K | (() => K)): [T, K] {
+    if (expected === undefined) {
+        expected = value as unknown as K
+    } else if (typeof expected === 'function') {
+        expected = (expected as unknown as Function)() as K
+    }
+    return [value, expected]
+}

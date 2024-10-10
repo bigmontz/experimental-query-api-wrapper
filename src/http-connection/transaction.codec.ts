@@ -200,6 +200,10 @@ export class CommitTransactionRequestCodec {
         return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
     }
 
+    get body () : Record<string, unknown> {
+        return {}
+    }
+
     get authorization(): string {
         return encodeAuthToken(this._auth)
     }
@@ -285,6 +289,10 @@ export class RollbackTransactionRequestCodec {
         private _config?: RollbackTransactionRequestCodecConfig
     ) {
 
+    }
+
+    get body () : Record<string, unknown> {
+        return {}
     }
 
     get contentType (): string {

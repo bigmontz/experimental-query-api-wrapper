@@ -243,6 +243,7 @@ export default class HttpConnection extends Connection {
                 mode: 'cors',
                 headers: this._headers(requestCodec),
                 signal: abortController.signal,
+                body: JSON.stringify(requestCodec.body)
             }
     
             this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
@@ -296,6 +297,7 @@ export default class HttpConnection extends Connection {
                 mode: 'cors',
                 headers: this._headers(requestCodec),
                 signal: abortController.signal,
+                body: JSON.stringify(requestCodec.body)
             }
     
             this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
