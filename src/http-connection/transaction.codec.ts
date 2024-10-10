@@ -28,7 +28,7 @@ export type RollbackTransactionRequestCodecConfig = {}
 export type RawTransaction = {
     id: string
     expires: number
-    tx_host: string
+    tx_host?: string
 }
 
 export type RawBeginTransactionSuccessResponse = {
@@ -118,7 +118,7 @@ export class BeginTransactionResponseCodec {
         throw new Error('Not implemented')
     }
 
-    get host(): string {
+    get host(): string | undefined {
         throw new Error('Not implemented')
     }
 
@@ -140,11 +140,11 @@ class  BeginTransactionSuccessResponseCodec extends BeginTransactionResponseCode
     }
 
     get expires(): number {
-        throw this._response.transaction.expires
+        return this._response.transaction.expires
     }
 
-    get host(): string {
-        throw this._response.transaction.tx_host
+    get host(): string | undefined {
+        return this._response.transaction.tx_host
     }
 }
 
@@ -165,7 +165,7 @@ class BeginTransactionFailureResponseCodec extends BeginTransactionResponseCodec
         throw this._error
     }
 
-    get host(): string {
+    get host(): string | undefined {
         throw this._error
     }
 }
@@ -193,7 +193,7 @@ export class CommitTransactionRequestCodec {
     }
 
     get contentType (): string {
-        return 'application/json'
+        return NEO4J_QUERY_CONTENT_TYPE
     }
 
     get accept (): string {
@@ -288,7 +288,7 @@ export class RollbackTransactionRequestCodec {
     }
 
     get contentType (): string {
-        return 'application/json'
+        return NEO4J_QUERY_CONTENT_TYPE
     }
 
     get accept (): string {

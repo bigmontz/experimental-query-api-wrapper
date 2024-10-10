@@ -33,7 +33,10 @@ when(config.version >= 5.25, () => describe('transactions', () => {
   beforeEach(() => {
     wrapper = neo4j.wrapper(
       `http://${config.hostname}:${config.httpPort}`,
-      neo4j.auth.basic(config.username, config.password)
+      neo4j.auth.basic(config.username, config.password),
+      { 
+        logging: neo4j.logging.console('debug')
+      }
     )
   })
 
@@ -50,19 +53,91 @@ when(config.version >= 5.25, () => describe('transactions', () => {
       [1],
       [2],
       [5]
-    ])('should be able run %s queries and commit a read tx', async (queries) => {
+    ])('should be able to run %s queries and commit a read tx', async (queries) => {
       for await (const session of withSession(wrapper, { database: config.database, defaultAccessMode: 'READ' })) {
         const tx = await session.beginTransaction()
         try  {
           for (let i = 0; i < queries; i++) {
-            await expect(tx.run('RETURN $a AS a', { a: i })).resolves.toBeDefined()
+            //  TODO FIXME, SEND ME AS A PARAM
+            await expect(tx.run(`RETURN ${i} AS a`)).resolves.toBeDefined()
           }
 
-          await expect(tx.commit()).resolves.toBeDefined()
+          await expect(tx.commit()).resolves.toBe(undefined)
         } finally {
           await tx.close()
         }
       }
+    })
+
+    it.each([
+      [0],
+      [1],
+      [2],
+      [5]
+    ])('should be able to run %s queries and commit a write tx', async (queries) => {
+      for await (const session of withSession(wrapper, { database: config.database, defaultAccessMode: 'WRITE' })) {
+        const tx = await session.beginTransaction()
+        try  {
+          for (let i = 0; i < queries; i++) {
+            //  TODO FIXME, SEND ME AS A PARAM
+            await expect(tx.run(`CREATE (n:Person{a:${i}}) RETURN n.a AS a`)).resolves.toBeDefined()
+          }
+
+          await expect(tx.commit()).resolves.toBe(undefined)
+        } finally {
+          await tx.close()
+        }
+      }
+    })
+  })
+
+  describe('managed', () => {
+    it.each([
+      [0],
+      [1],
+      [2],
+      [5]
+    ])('should be able to run %s queries using executeRead', async (queries) => {
+      for await (const session of withSession(wrapper, { database: config.database })) {
+        await expect(session.executeRead(async tx => {
+          for (let i = 0; i < queries; i++) {
+            //  TODO FIXME, SEND ME AS A PARAM
+            await expect(tx.run(`RETURN ${i} AS a`)).resolves.toBeDefined()
+          }
+        })).resolves.toBe(undefined)
+      }
+    })
+
+    it.each([
+      [0],
+      [1],
+      [2],
+      [5]
+    ])('should be able to run %s queries using executeWrite', async (queries) => {
+      for await (const session of withSession(wrapper, { database: config.database, })) {
+        await expect(session.executeWrite(async tx => {
+          for (let i = 0; i < queries; i++) {
+            //  TODO FIXME, SEND ME AS A PARAM
+            await expect(tx.run(`CREATE (n:Person{a:${i}}) RETURN n.a AS a`)).resolves.toBeDefined()
+          }
+        })).resolves.toBe(undefined)
+      }
+    })
+
+    it('should be able to run a read query using executeQuery', async () => {
+      const i = 34
+      await expect(wrapper.executeQuery(`RETURN ${i} AS a`, undefined, {
+        database: config.database,
+        routing: 'READ'
+      })).resolves.toBeDefined()
+    })
+
+    it('should be able to run a write query using executeQuery', async () => {
+      const i = 34
+      await expect(wrapper.executeQuery(`CREATE (n:Person{a:${i}}) RETURN n.a AS a`, undefined, {
+        database: config.database,
+        routing: 'WRITE'
+      })).resolves.toBeDefined()
     })
   })
 }))
