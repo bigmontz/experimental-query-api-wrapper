@@ -14,7 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { Driver, ServerInfo, types } from "neo4j-driver-core";
+import { BookmarkManager, Driver, EagerResult, QueryConfig, RecordShape, ServerInfo, types } from "neo4j-driver-core";
 import { Wrapper, WrapperSession, WrapperSessionConfig } from "./types";
 import WrapperSessionImpl from "./wrapper-session.impl";
 
@@ -25,6 +25,15 @@ export class WrapperImpl implements Wrapper {
 
     close(): Promise<void> {
         return this.driver.close()
+    }
+
+    executeQuery<T = EagerResult<RecordShape>>(query: types.Query, parameters?: any, config?: QueryConfig<T> | undefined): Promise<T> {
+        validateDatabase(config)
+        return this.driver.executeQuery(query, parameters, config)
+    }
+
+    get executeQueryBookmarkManager(): BookmarkManager {
+        return this.driver.executeQueryBookmarkManager
     }
     
     verifyConnectivity(config: { database: string }): Promise<ServerInfo> {
@@ -62,8 +71,8 @@ export class WrapperImpl implements Wrapper {
     }
 }
 
-function validateDatabase(config: { database: string }): void {
-    if (config.database == null || config.database === '') {
-        throw new TypeError(`database must be a non-empty string, but got ${config.database}`)
+function validateDatabase(config: { database?: string } | undefined): void {
+    if (config == null || config.database == null || config.database === '') {
+        throw new TypeError(`database must be a non-empty string, but got ${config?.database}`)
     }
 }
