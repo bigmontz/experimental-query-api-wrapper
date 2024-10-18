@@ -25,7 +25,7 @@ export type RollbackTransactionRequestCodecConfig = {}
 
 export type RawTransaction = {
     id: string
-    expires: number
+    expires: string
     tx_host?: string
 }
 
@@ -112,7 +112,7 @@ export class BeginTransactionResponseCodec {
         throw new Error('Not implemented')
     }
 
-    get expires(): number {
+    get expires(): Date {
         throw new Error('Not implemented')
     }
 
@@ -137,8 +137,8 @@ class  BeginTransactionSuccessResponseCodec extends BeginTransactionResponseCode
         return this._response.transaction.id
     }
 
-    get expires(): number {
-        return this._response.transaction.expires
+    get expires(): Date {
+        return new Date(this._response.transaction.expires)
     }
 
     get host(): string | undefined {
@@ -159,7 +159,7 @@ class BeginTransactionFailureResponseCodec extends BeginTransactionResponseCodec
         throw this._error
     }
 
-    get expires(): number {
+    get expires(): Date {
         throw this._error
     }
 

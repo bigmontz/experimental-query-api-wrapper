@@ -50,7 +50,7 @@ export default class HttpConnection extends Connection {
     private _id: number
     private _errorHandler: (error: Error & { code: string, retriable: boolean }) => Error
     private _open: boolean
-    private _currentTx: { id: string, affinity?: string, host?: string, database: string } | undefined
+    private _currentTx: { id: string, affinity?: string, host?: string, expires: Date,  database: string } | undefined
     private _workPipe: Pipe
 
     constructor(config: HttpConnectionConfig) {
@@ -202,6 +202,7 @@ export default class HttpConnection extends Connection {
             this._currentTx = {
                 id: codec.id,
                 host: codec.host,
+                expires: codec.expires,
                 database: config?.database!,
             }
 

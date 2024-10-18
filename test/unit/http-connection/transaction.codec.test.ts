@@ -164,7 +164,7 @@ describe('BeginTransactionResponseCodec', () => {
     const DEFAULT_RAW_RESPONSE = {
         transaction: {
             id: 'abc',
-            expires: 3000
+            expires: '2024-10-18T09:11:12Z'
         }
     }
 
@@ -193,7 +193,7 @@ describe('BeginTransactionResponseCodec', () => {
         it('should handle success', () => {
             const codec = subject()
 
-            expect(codec.expires).toBe(DEFAULT_RAW_RESPONSE.transaction.expires)
+            expect(codec.expires).toEqual(new Date(DEFAULT_RAW_RESPONSE.transaction.expires))
         })
 
         it('should handle failures', () => {
