@@ -84,7 +84,10 @@ import {
   types as coreTypes,
   UnboundRelationship,
   driver as coreDriver,
-  
+  Transaction,
+  TransactionConfig,
+  TransactionPromise,
+  ManagedTransaction
 } from 'neo4j-driver-core'
 
 import { logging } from './logging'
@@ -311,6 +314,9 @@ const forExport = {
   Result,
   Record,
   ResultSummary,
+  Transaction,
+  TransactionPromise,
+  ManagedTransaction,
   Node,
   Relationship,
   UnboundRelationship,
@@ -382,6 +388,9 @@ export {
   Notification,
   ServerInfo,
   Session,
+  Transaction,
+  TransactionPromise,
+  ManagedTransaction,
   Point,
   Duration,
   LocalTime,
@@ -416,6 +425,7 @@ export type {
   QueryConfig,
   RecordShape,
   ResultTransformer,
+  TransactionConfig,
   NotificationCategory,
   NotificationSeverityLevel,
   Logger,
