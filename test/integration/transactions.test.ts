@@ -58,10 +58,8 @@ when(config.version >= 5.26, () => describe('transactions', () => {
         const tx = await session.beginTransaction()
         try  {
           for (let i = 0; i < queries; i++) {
-            //  TODO FIXME, SEND ME AS A PARAM
-            await expect(tx.run(`RETURN ${i} AS a`)).resolves.toBeDefined()
+            await expect(tx.run('RETURN $i AS a', { i })).resolves.toBeDefined()
           }
-
           await expect(tx.commit()).resolves.toBe(undefined)
         } finally {
           await tx.close()
@@ -79,8 +77,7 @@ when(config.version >= 5.26, () => describe('transactions', () => {
         const tx = await session.beginTransaction()
         try  {
           for (let i = 0; i < queries; i++) {
-            //  TODO FIXME, SEND ME AS A PARAM
-            await expect(tx.run(`CREATE (n:Person{a:${i}}) RETURN n.a AS a`)).resolves.toBeDefined()
+            await expect(tx.run('CREATE (n:Person{a:$i}) RETURN n.a AS a', { i })).resolves.toBeDefined()
           }
 
           await expect(tx.commit()).resolves.toBe(undefined)
@@ -101,8 +98,7 @@ when(config.version >= 5.26, () => describe('transactions', () => {
       for await (const session of withSession(wrapper, { database: config.database })) {
         await expect(session.executeRead(async tx => {
           for (let i = 0; i < queries; i++) {
-            //  TODO FIXME, SEND ME AS A PARAM
-            await expect(tx.run(`RETURN ${i} AS a`)).resolves.toBeDefined()
+            await expect(tx.run('RETURN $i AS a', { i })).resolves.toBeDefined()
           }
         })).resolves.toBe(undefined)
       }
@@ -117,8 +113,7 @@ when(config.version >= 5.26, () => describe('transactions', () => {
       for await (const session of withSession(wrapper, { database: config.database, })) {
         await expect(session.executeWrite(async tx => {
           for (let i = 0; i < queries; i++) {
-            //  TODO FIXME, SEND ME AS A PARAM
-            await expect(tx.run(`CREATE (n:Person{a:${i}}) RETURN n.a AS a`)).resolves.toBeDefined()
+            await expect(tx.run('CREATE (n:Person{a:$i}) RETURN n.a AS a', { i })).resolves.toBeDefined()
           }
         })).resolves.toBe(undefined)
       }
@@ -126,7 +121,7 @@ when(config.version >= 5.26, () => describe('transactions', () => {
 
     it('should be able to run a read query using executeQuery', async () => {
       const i = 34
-      await expect(wrapper.executeQuery(`RETURN ${i} AS a`, undefined, {
+      await expect(wrapper.executeQuery('RETURN $i AS a', { i }, {
         database: config.database,
         routing: 'READ'
       })).resolves.toBeDefined()
@@ -134,7 +129,7 @@ when(config.version >= 5.26, () => describe('transactions', () => {
 
     it('should be able to run a write query using executeQuery', async () => {
       const i = 34
-      await expect(wrapper.executeQuery(`CREATE (n:Person{a:${i}}) RETURN n.a AS a`, undefined, {
+      await expect(wrapper.executeQuery('CREATE (n:Person{a:$i}) RETURN n.a AS a', { i }, {
         database: config.database,
         routing: 'WRITE'
       })).resolves.toBeDefined()
