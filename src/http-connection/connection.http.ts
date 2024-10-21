@@ -445,8 +445,10 @@ export default class HttpConnection extends Connection {
 
 async function readBodyAndReaders<T extends Record<string, unknown>> (url: string, response: Response, ...headers: string[]): Promise<{ body: T, headers: (string | null)[]}> {
     try {
+        const text = await response.text()
+        
         return {
-            body: await response.json() as T,
+            body: text !== '' ? JSON.parse(text) : {},
             headers: headers.map(header => response.headers.get(header))
         }        
     } catch (error) {

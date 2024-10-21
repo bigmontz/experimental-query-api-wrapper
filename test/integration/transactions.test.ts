@@ -86,6 +86,30 @@ when(config.version >= 5.26, () => describe('transactions', () => {
         }
       }
     })
+
+    it('should be able to rollback a tx', async () => {
+      for await (const session of withSession(wrapper, { database: config.database, defaultAccessMode: 'WRITE' })) {
+        const tx = await session.beginTransaction()
+        try  {
+          const a = 'A'
+          // CREATING NODE
+          await expect(tx.run('CREATE (n:Person{a:$a}) RETURN n.a AS a', { a })).resolves.toBeDefined()
+          
+          // CHECK IF THE NODE IS ON THE DATABASE
+          const { records: [record] } = await tx.run('MATCH (n:Person{a:$a}) RETURN n.a AS a', { a })
+          expect(record.get('a')).toBe(a)
+
+          // ROLLBACK
+          await expect(tx.rollback()).resolves.toBe(undefined)
+
+          // CHECK IF USER IS NOT ON THE DB
+          const { records } = await session.run('MATCH (n:Person{a:$a}) RETURN n.a AS a', { a })
+          expect(records.length).toBe(0)
+        } finally {
+          await tx.close()
+        }
+      }
+    })
   })
 
   describe('managed', () => {
