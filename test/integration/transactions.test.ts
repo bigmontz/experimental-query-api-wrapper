@@ -143,6 +143,31 @@ when(config.version >= 5.26, () => describe('transactions', () => {
       }
     })
 
+    it('should be able to handle password rotation on executeWrite', async () => {
+      let password = config.password + 'wrong'
+      let passwordCall = 0
+      wrapper = neo4j.wrapper(`http://${config.hostname}:${config.httpPort}`,
+        neo4j.authTokenManagers.basic({ tokenProvider: async () => {
+            try {
+              return neo4j.auth.basic(config.username, password)
+            } finally {
+              passwordCall++
+              password = config.password
+            }
+          }
+        }),
+        {
+          logging: config.loggingConfig
+        }
+      )
+  
+      for await (const session of withSession(wrapper, { database: config.database, })) {
+        await expect(session.executeWrite((tx) => tx.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}))).resolves.toBeDefined()
+
+        expect(passwordCall).toBe(2)
+      }
+    })
+
     it('should be able to run a read query using executeQuery', async () => {
       const i = 34
       await expect(wrapper.executeQuery('RETURN $i AS a', { i }, {
