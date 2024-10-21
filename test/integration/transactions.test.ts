@@ -35,7 +35,7 @@ when(config.version >= 5.26, () => describe('transactions', () => {
       `http://${config.hostname}:${config.httpPort}`,
       neo4j.auth.basic(config.username, config.password),
       { 
-        logging: neo4j.logging.console('debug')
+        logging: config.loggingConfig
       }
     )
   })

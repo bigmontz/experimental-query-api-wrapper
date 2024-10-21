@@ -16,6 +16,7 @@
  */
 import Neo4jContainer from './neo4j.container'
 import WireMockContainer from './wiremock.container'
+import neo4j from '../../../src'
 
 const env = process.env
 
@@ -27,6 +28,7 @@ const version = env.TEST_NEO4J_VERSION ?? '5.23'
 const httpPort = env.TEST_NEO4J_HTTP_PORT ?? 7474
 const boltPort = env.TEST_NEO4J_BOLT_PORT ?? 7687
 const edition = env.TEST_NEO4J_EDITION ?? 'enterprise'
+const logLevel = env.TEST_DRIVER_LOG_LEVEL 
 const printContainerLogs = env.TEST_CONTAINERS_LOGS !== undefined
         ? env.TEST_CONTAINERS_LOGS.toUpperCase() === 'TRUE'
         : false
@@ -85,5 +87,11 @@ export default {
   },
   async deleteWireMockStub (stubId?: string): Promise<void> {
     return await wireMockContainer.deleteStub(stubId)
+  },
+  get loggingConfig () {
+    if (logLevel != null) {
+      return neo4j.logging.console(logLevel as any)
+    }
+    return undefined
   }
 }
