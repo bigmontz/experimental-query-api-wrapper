@@ -333,12 +333,10 @@ export default class HttpConnection extends Connection {
         if (this._currentTx === undefined) {
             return this._queryEndpoint.replace('{databaseName}', database)
         }
-        // TODO: ADD HOST
         return this._queryEndpoint.replace('{databaseName}',  this._currentTx.database) + `tx/${this._currentTx.id}`
     }
 
     private _getTransactionCommitApi(): string {
-        // TODO: ADD HOST
         return this._queryEndpoint.replace('{databaseName}', this._currentTx?.database!) + `tx/${this._currentTx?.id}/commit`
     }
 
@@ -360,7 +358,6 @@ export default class HttpConnection extends Connection {
             .then(json => {
                 if (typeof json.query !== 'string') {
                     throw new Error('Query API is not available')
-
                 }
                 return { query: json.query, version: json.neo4j_version, edition: json.neo4j_edition }
             })

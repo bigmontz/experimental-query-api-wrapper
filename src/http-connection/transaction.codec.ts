@@ -248,7 +248,7 @@ class  CommitTransactionSuccessResponseCodec extends CommitTransactionResponseCo
 
     get meta(): Record<string, unknown> {
         return {
-            bookmarks: this._response.bookmarks
+            bookmark: this._response.bookmarks
         }
     }
 }

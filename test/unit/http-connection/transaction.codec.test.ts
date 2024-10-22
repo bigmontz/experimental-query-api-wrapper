@@ -348,7 +348,7 @@ describe('CommitTransactionResponseCodec', () => {
             const codec = subject({ rawQueryResponse: { bookmarks }})
 
             expect(codec.meta).toEqual({
-                bookmarks
+                bookmark: bookmarks
             })
         })
 
