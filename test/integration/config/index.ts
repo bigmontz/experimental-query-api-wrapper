@@ -24,6 +24,7 @@ const username = env.TEST_NEO4J_USER ?? 'neo4j'
 const password = env.TEST_NEO4J_PASS ?? 'password'
 const hostname = env.TEST_NEO4J_HOST ?? 'localhost'
 const scheme = env.TEST_NEO4J_SCHEME ?? 'bolt'
+const httpScheme = env.TEST_NEO4J_HTTP_SCHEME ?? 'http'
 const version = env.TEST_NEO4J_VERSION ?? '5.23'
 const httpPort = env.TEST_NEO4J_HTTP_PORT ?? 7474
 const boltPort = env.TEST_NEO4J_BOLT_PORT ?? 7687
@@ -47,6 +48,7 @@ export default {
   password,
   hostname,
   scheme,
+  httpScheme,
   cluster,
   database,
   get testNonClusterSafe () {

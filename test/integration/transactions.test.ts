@@ -32,7 +32,7 @@ when(config.version >= 5.26, () => describe('transactions', () => {
 
   beforeEach(() => {
     wrapper = neo4j.wrapper(
-      `http://${config.hostname}:${config.httpPort}`,
+      `${config.httpScheme}://${config.hostname}:${config.httpPort}`,
       neo4j.auth.basic(config.username, config.password),
       { 
         logging: config.loggingConfig

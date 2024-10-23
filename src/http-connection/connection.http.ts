@@ -333,15 +333,15 @@ export default class HttpConnection extends Connection {
         if (this._currentTx === undefined) {
             return this._queryEndpoint.replace('{databaseName}', database)
         }
-        return this._queryEndpoint.replace('{databaseName}',  this._currentTx.database) + `tx/${this._currentTx.id}`
+        return this._queryEndpoint.replace('{databaseName}',  this._currentTx.database) + `/tx/${this._currentTx.id}`
     }
 
     private _getTransactionCommitApi(): string {
-        return this._queryEndpoint.replace('{databaseName}', this._currentTx?.database!) + `tx/${this._currentTx?.id}/commit`
+        return this._queryEndpoint.replace('{databaseName}', this._currentTx?.database!) + `/tx/${this._currentTx?.id}/commit`
     }
 
     private _getExplicityTransactionApi(database: string): string {
-        return this._queryEndpoint.replace('{databaseName}', database) + 'tx'
+        return this._queryEndpoint.replace('{databaseName}', database) + '/tx'
     }
 
     static async discover({ scheme, address }: { scheme: HttpScheme, address: internal.serverAddress.ServerAddress }): Promise<{
@@ -359,7 +359,8 @@ export default class HttpConnection extends Connection {
                 if (typeof json.query !== 'string') {
                     throw new Error('Query API is not available')
                 }
-                return { query: json.query, version: json.neo4j_version, edition: json.neo4j_edition }
+                const query = json.query.endsWith('/') ? json.query.substring(0, json.query.length - 1) : json.query
+                return { query, version: json.neo4j_version, edition: json.neo4j_edition }
             })
             .catch(e => {
                 throw newError(`Failure discovering endpoints. Caused by: ${e.message}`, 'SERVICE_UNAVAILABLE', e)
