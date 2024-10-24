@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 import config from './config'
-import neo4j, { Date, DateTime, Duration, LocalDateTime, LocalTime, Neo4jError, Plan, Point, ProfiledPlan, Time, Wrapper, WrapperSession, WrapperSessionConfig, int } from '../../src'
+import neo4j, { Date, DateTime, Duration, LocalDateTime, LocalTime, Neo4jError, Plan, Point, ProfiledPlan, Result, Time, TransactionConfig, Wrapper, WrapperSession, WrapperSessionConfig, int } from '../../src'
 import { when, withSession as _withSession } from './test.utils'
 
 const NESTED_OBJECT = { 
@@ -66,7 +66,7 @@ const OBJECT_OF_LISTS = {
   b: [1, 2]
 }
 
-when(config.version >= 5.23, () => describe('minimum requirement', () => {
+when(config.version >= 5.23, () => describe.each(runners())('minimum requirement %s', (_, runner) => {
   let wrapper: Wrapper
 
   beforeAll(async () => {
@@ -79,8 +79,11 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
 
   beforeEach(() => {
     wrapper = neo4j.wrapper(
-      `http://${config.hostname}:${config.httpPort}`,
-      neo4j.auth.basic(config.username, config.password)
+      `${config.httpScheme}://${config.hostname}:${config.httpPort}`,
+      neo4j.auth.basic(config.username, config.password),
+      { 
+        logging: config.loggingConfig
+      }
     )
   })
 
@@ -170,7 +173,7 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     ['object of lists', v(OBJECT_OF_LISTS)]
   ])('should be able to echo "%s" (%s)', async (_, [input, expectedOutput]) => {
     for await (const session of withSession({ database: config.database })) {
-      const { records: [first] } = await session.run('RETURN $input as output',  { input })
+      const { records: [first] } = await runner(session, 'RETURN $input as output',  { input })
       expect(first.get('output')).toEqual(expectedOutput) 
     } 
   })
@@ -179,7 +182,7 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     for await (const session of withSession({ database: config.database })) {
       const dt = new DateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234), undefined, 'Europe/Berlin')
 
-      await expect(session.run(`RETURN $dt`, { dt })).rejects.toEqual(new Error(
+      await expect(runner(session, `RETURN $dt`, { dt })).rejects.toEqual(new Error(
         'DateTime objects without "timeZoneOffsetSeconds" property ' +
                 'are prone to bugs related to ambiguous times. For instance, ' +
                 '2022-10-30T2:30:00[Europe/Berlin] could be GMT+1 or GMT+2.'
@@ -203,14 +206,14 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     ['Datetime "2020-01-01', 'datetime("2020-01-01")', new DateTime(int(2020), int(1), int(1), int(0), int(0), int(0), int(0), int(0))] 
   ])('should be able to echo "%s" (%s)', async (_, statement, expectedOutput) => {
     for await (const session of withSession({ database: config.database })) {
-      const { records: [first] } = await session.run(`RETURN ${statement} as output`)
+      const { records: [first] } = await runner(session, `RETURN ${statement} as output`)
       expect(first.get('output')).toEqual(expectedOutput) 
     }
   })
 
   it('should be able to return ResultSummary.counters', async () => {
     for await (const session of withSession({ database: config.database })) {
-      const { summary: { counters} } = await session.run(
+      const { summary: { counters} } = await runner(session, 
         'CREATE (n: Person { name: "This person"})-[:WORKS_WITH]->(:Person { name: "Other person" }) ' +
         'RETURN n')
 
@@ -235,7 +238,7 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
 
   it('should be able to return ResultSummary.plan', async () => {
     for await (const session of withSession({ database: config.database })) {
-      const { summary} = await session.run('PROFILE RETURN 1')
+      const { summary} = await runner(session, 'PROFILE RETURN 1')
 
       expect(summary.plan).not.toBe(false)
       
@@ -281,7 +284,7 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
 
   it('should be able to return ResultSummary.profile',async () => {
     for await (const session of withSession({ database: config.database })) {
-      const { summary} = await session.run('PROFILE RETURN 1')
+      const { summary} = await runner(session, 'PROFILE RETURN 1')
 
       expect(summary.profile).not.toBe(false)
       
@@ -341,13 +344,13 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     for await (const session of withSession({ database: config.database })) {
       expect(session.lastBookmarks()).toEqual([])
 
-      await session.run('RETURN 1')
+      await runner(session, 'RETURN 1')
 
       expect(session.lastBookmarks()).toHaveLength(1)
       expect(typeof session.lastBookmarks()[0]).toBe('string')
       const [previousBookmark] = session.lastBookmarks()
 
-      await session.run('CREATE (n:Person { name: $name }) RETURN n', { name: 'My Mom'})
+      await runner(session, 'CREATE (n:Person { name: $name }) RETURN n', { name: 'My Mom'})
 
       expect(session.lastBookmarks()).toHaveLength(1)
       expect(typeof session.lastBookmarks()[0]).toBe('string')
@@ -357,7 +360,7 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
 
   it('should be able to return notifications', async () => {
     for await (const session of withSession({ database: config.database })) {
-      const { summary} = await session.run('MATCH (a: NonExistentLabel) USING INDEX a:NonExistentLabel(id) WHERE a.id = 1 RETURN a')
+      const { summary} = await runner(session, 'MATCH (a: NonExistentLabel) USING INDEX a:NonExistentLabel(id) WHERE a.id = 1 RETURN a')
 
       expect(summary.notifications.length).toBe(3)
 
@@ -391,7 +394,7 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
 
   it('should be able to set access mode', async () => {
     for await (const session of withSession({ database: config.database, defaultAccessMode: 'READ' })) {
-      const error = await session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).summary().catch(e => e)
+      const error = await runner(session, 'CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).catch(e => e)
       
       expect(error).toBeInstanceOf(Neo4jError)
       expect(error.code).toEqual('Neo.ClientError.Statement.AccessMode')
@@ -402,7 +405,7 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
 
   it('should be able to set tx timeout', async () => {
     for await (const session of withSession({ database: config.database })) {
-      await expect(session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}, { timeout: 123 }).summary()).resolves.not.toBeNull()
+      await expect(runner(session, 'CREATE (:Person {name: $name })', { name: 'Gregory Irons'}, { timeout: 123 })).resolves.not.toBeNull()
     }
   })
 
@@ -416,19 +419,22 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
             password = config.password
           }
         }
-      })
+      }),
+      {
+        logging: config.loggingConfig
+      }
     )
 
     for await (const session of withSession({ database: config.database })) {
-      const error = await session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).summary().catch(e => e)
+      const error = await runner(session, 'CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).catch(e => e)
       
       expect(error).toBeInstanceOf(Neo4jError)
-      expect(error.retriable).toEqual(true)
       expect(error.code).toEqual('Neo.ClientError.Security.Unauthorized')
+      expect(error.retriable).toEqual(true)
       expect(typeof error.message).toEqual('string')
       expect(error.message.trim()).not.toEqual('')
 
-      await session.run('CREATE (:Person {name: $name })', { name: 'Gregory Irons'}).summary()
+      await runner(session, 'CREATE (:Person {name: $name })', { name: 'Gregory Irons'})
     }
   })
 
@@ -444,3 +450,30 @@ when(config.version >= 5.23, () => describe('minimum requirement', () => {
     return [value, mapper(value)]
   }
 }))
+
+function runners (): [string, Runner][] {
+  let runners: [string, Runner][] = [
+    ['session.run', async (session: WrapperSession, text: string, parameters?: any, config?: TransactionConfig): Promise<Result> => session.run(text, parameters, config)]
+  ]
+
+  if (config.version >= 5.26) {
+    runners = [
+      ...runners,
+      ['session.beginTransaction', async (session: WrapperSession, text: string, parameters?: any, config?: TransactionConfig): Promise<Result> => {
+        const tx = session.beginTransaction(config)
+        try {
+          const result =  await tx.run(text, parameters)
+          await tx.commit()
+          return result
+        } finally {
+          await tx.close()
+        }
+      }]
+    ]
+  }
+
+  return runners
+}
+
+type Runner = (session: WrapperSession, text: string, parameters?: any, config?: TransactionConfig) => Promise<Result>
+  

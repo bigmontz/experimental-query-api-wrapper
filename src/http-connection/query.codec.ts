@@ -17,6 +17,7 @@
 
 import { newError, Node, Relationship, int, error, types, Integer, Time, Date, LocalTime, Point, DateTime, LocalDateTime, Duration, isInt, isPoint, isDuration, isLocalTime, isTime, isDate, isLocalDateTime, isDateTime, isRelationship, isPath, isNode, isPathSegment, Path, PathSegment, internal, isUnboundRelationship } from "neo4j-driver-core"
 import { RunQueryConfig } from "neo4j-driver-core/types/connection"
+import { NEO4J_QUERY_CONTENT_TYPE, encodeAuthToken, encodeTransactionBody } from "./codec"
 
 export type RawQueryValueTypes = 'Null' | 'Boolean' | 'Integer' | 'Float' | 'String' |
     'Time' | 'Date' | 'LocalTime' | 'ZonedDateTime' | 'OffsetDateTime' | 'LocalDateTime' |
@@ -125,8 +126,6 @@ export type RawQueryFailuresResponse = {
 }
 
 export type RawQueryResponse = RawQuerySuccessResponse | RawQueryFailuresResponse
-
-const NEO4J_QUERY_CONTENT_TYPE = 'application/vnd.neo4j.query'
 
 export class QueryResponseCodec {
 
@@ -677,8 +676,6 @@ export class QueryRequestCodec {
 
     }
 
-
-
     get contentType(): string {
         return NEO4J_QUERY_CONTENT_TYPE
     }
@@ -688,14 +685,7 @@ export class QueryRequestCodec {
     }
 
     get authorization(): string {
-        switch (this._auth.scheme) {
-            case 'bearer':
-                return `Bearer ${btoa(this._auth.credentials)}`
-            case 'basic':
-                return `Basic ${btoa(`${this._auth.principal}:${this._auth.credentials}`)}`
-            default:
-                throw new Error(`Authorization scheme "${this._auth.scheme}" is not supported.`)
-        }
+        return encodeAuthToken(this._auth)
     }
 
     get body(): Record<string, unknown> {
@@ -705,27 +695,12 @@ export class QueryRequestCodec {
 
         this._body = {
             statement: this._query,
-            includeCounters: true
+            includeCounters: true,
+            ...encodeTransactionBody(this._config)
         }
 
         if (this._parameters != null && Object.getOwnPropertyNames(this._parameters).length !== 0) {
             this._body.parameters = this._encodeParameters(this._parameters!)
-        }
-
-        if (this._config?.bookmarks != null && !this._config.bookmarks.isEmpty()) {
-            this._body.bookmarks = this._config?.bookmarks?.values()
-        }
-
-        if (this._config?.txConfig.timeout != null) {
-            this._body.maxExecutionTime = this._config?.txConfig.timeout.toInt()
-        }
-
-        if (this._config?.impersonatedUser != null) {
-            this._body.impersonatedUser = this._config?.impersonatedUser
-        }
-
-        if (this._config?.mode) {
-            this._body.accessMode = this._config.mode.toUpperCase()
         }
 
         return this._body

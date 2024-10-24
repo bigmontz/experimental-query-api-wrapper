@@ -26,15 +26,17 @@ type VerifyAuthentication = {
 }
 
 type HttpUrl = `http://${string}` | `https://${string}`
-type WrapperSession = Pick<Session, 'run' | 'lastBookmarks' | 'close' > & Disposable 
+type WrapperSession = Pick<Session, 'run' | 'beginTransaction' | 'executeRead' | 'executeWrite' | 'lastBookmarks' | 'close' > & Disposable 
 type WrapperSessionConfig = Pick<SessionConfig, 'bookmarks' | 'impersonatedUser' | 'bookmarkManager' | 'defaultAccessMode' | 'auth'> & {
   database: string
 }
-type Wrapper = Pick<Driver, 'close' | 'supportsMultiDb'| 'supportsSessionAuth' | 'supportsUserImpersonation'> & Disposable & VerifyConnectivity & VerifyAuthentication & {
+type Wrapper = Pick<Driver, 'close' | 'executeQuery' | 'executeQueryBookmarkManager' | 'supportsMultiDb'| 'supportsSessionAuth' | 'supportsUserImpersonation'> & Disposable & VerifyConnectivity & VerifyAuthentication & {
   session(config: WrapperSessionConfig): WrapperSession
 } 
 
-type WrapperConfig = Pick<Config, 'encrypted' | 'useBigInt' | 'disableLosslessIntegers' | 'maxConnectionPoolSize' | 'connectionAcquisitionTimeout'>
+type WrapperConfig = Pick<Config, 'encrypted' | 'useBigInt' | 'disableLosslessIntegers' | 'maxConnectionPoolSize' | 'connectionAcquisitionTimeout'> & {
+  httpSessionAffinityHeader?: string
+}
 
 export type {
   HttpUrl,

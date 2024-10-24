@@ -16,9 +16,12 @@
  */
 
 import { Connection, types, internal, newError } from "neo4j-driver-core"
-import { RunQueryConfig } from "neo4j-driver-core/types/connection"
+import { BeginTransactionConfig, CommitTransactionConfig, RunQueryConfig } from "neo4j-driver-core/types/connection"
 import { ResultStreamObserver } from "./stream-observers"
 import { QueryRequestCodec, QueryResponseCodec, RawQueryResponse } from "./query.codec"
+import { BeginTransactionRequestCodec, RawBeginTransactionResponse, BeginTransactionResponseCodec, CommitTransactionRequestCodec, RawCommitTransactionResponse, CommitTransactionResponseCodec, RollbackTransactionRequestCodec, RawRollbackTransactionResponse, RollbackTransactionResponseCodec } from "./transaction.codec"
+import { WrapperConfig } from "../types"
+import Pipe from "./lang/pipe"
 
 export type HttpScheme = 'http' | 'https'
 
@@ -29,7 +32,7 @@ export interface HttpConnectionConfig {
     auth: types.AuthToken
     queryEndpoint: string
     address: internal.serverAddress.ServerAddress
-    config: types.InternalConfig
+    config: WrapperConfig
     logger: internal.logger.Logger,
     errorHandler: (error: Error & { code: string, retriable: boolean }) => Error
 }
@@ -41,11 +44,14 @@ export default class HttpConnection extends Connection {
     private _queryEndpoint: string
     private _address: internal.serverAddress.ServerAddress
     private _config: types.InternalConfig
-    private _abortController?: AbortController
+    private _abortControllers: AbortController[]
     private _log?: internal.logger.Logger
+    private _sessionAffinityHeader: string 
     private _id: number
     private _errorHandler: (error: Error & { code: string, retriable: boolean }) => Error
     private _open: boolean
+    private _currentTx: { id: string, affinity?: string, host?: string, expires: Date,  database: string } | undefined
+    private _workPipe: Pipe
 
     constructor(config: HttpConnectionConfig) {
         super()
@@ -57,6 +63,10 @@ export default class HttpConnection extends Connection {
         this._log = config.logger
         this._errorHandler = config.errorHandler
         this._open = true
+        this._currentTx = undefined
+        this._workPipe = new Pipe(config.logger)
+        this._abortControllers = []
+        this._sessionAffinityHeader = config.config.httpSessionAffinityHeader ?? 'neo4j-cluster-affinity'
     }
 
     run(query: string, parameters?: Record<string, unknown> | undefined, config?: RunQueryConfig | undefined): internal.observer.ResultStreamObserver {
@@ -64,6 +74,7 @@ export default class HttpConnection extends Connection {
             highRecordWatermark: config?.highRecordWatermark ?? Number.MAX_SAFE_INTEGER,
             lowRecordWatermark: config?.lowRecordWatermark ?? Number.MIN_SAFE_INTEGER,
             afterComplete: config?.afterComplete,
+            beforeError: config?.beforeError,
             server: this._address,
         })
 
@@ -74,78 +85,263 @@ export default class HttpConnection extends Connection {
             config
         )
 
-        this._abortController = new AbortController()
+        const abortController = this._newAbortController()
 
-        const request: RequestInit & { url: string } = {
-            url: this._getTransactionApi(config?.database!),
-            method: 'POST',
-            mode: 'cors',
-            headers: {
-                'Content-Type': requestCodec.contentType,
-                Accept: requestCodec.accept,
-                Authorization: requestCodec.authorization,
-            },
-            signal: this._abortController.signal,
-            body: JSON.stringify(requestCodec.body)
-        }
+        this._workPipe.attach(async () => {
+            const request: RequestInit & { url: string } = {
+                url: this._getTransactionApi(config?.database!),
+                method: 'POST',
+                mode: 'cors',
+                headers: this._headers(requestCodec),
+                signal: abortController.signal,
+                body: JSON.stringify(requestCodec.body)
+            }
+    
+            this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)}`)
 
-        this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
+            const res = await fetch(request.url, request)
+            const { body: rawQueryResponse, headers: [contentType] } = await readBodyAndReaders<RawQueryResponse>(request.url, res, 'content-type')
+            
+            this._log?.debug(`${this} ${JSON.stringify(rawQueryResponse)}`)
+            const batchSize = config?.fetchSize ?? Number.MAX_SAFE_INTEGER
+            const codec = QueryResponseCodec.of(this._config, contentType ?? '', rawQueryResponse);
 
-        fetch(request.url, request).
-            then(async (res) => {
-                return [res.headers.get('content-type'), (await res.json()) as RawQueryResponse]
-            })
-            .catch((error) => this._handleAndReThrown(newError(`Failure accessing "${request.url}"`, 'SERVICE_UNAVAILABLE', error)))
-            .catch((error) => observer.onError(error))
-            .then(async ([contentType, rawQueryResponse]: [string, RawQueryResponse]) => {
-                if (rawQueryResponse == null) {
-                    // is already dead
-                    return
+            if (codec.error) {
+                throw codec.error
+            }
+
+            observer.onKeys(codec.keys)
+            const stream = codec.stream()
+
+            while (!observer.completed) {
+                if (observer.paused) {
+                    await new Promise((resolve) => setTimeout(resolve, 20))
+                    continue
                 }
-                this._log?.debug(`${this} ${JSON.stringify(rawQueryResponse)}`)
-                const batchSize = config?.fetchSize ?? Number.MAX_SAFE_INTEGER
-                const codec = QueryResponseCodec.of(this._config, contentType, rawQueryResponse);
 
-                if (codec.error) {
-                    throw codec.error
-                }
-                observer.onKeys(codec.keys)
-                const stream = codec.stream()
-
-                while (!observer.completed) {
-                    if (observer.paused) {
-                        await new Promise((resolve) => setTimeout(resolve, 20))
-                        continue
-                    }
-
-                    for (let i = 0; !observer.paused && i < batchSize && !observer.completed; i++) {
-                        const { done, value: rawRecord } = stream.next()
-                        if (!done) {
-                            observer.onNext(rawRecord)
-                        } else {
-                            observer.onCompleted(codec.meta)
-                        }
+                for (let i = 0; !observer.paused && i < batchSize && !observer.completed; i++) {
+                    const { done, value: rawRecord } = stream.next()
+                    if (!done) {
+                        observer.onNext(rawRecord)
+                    } else {
+                        observer.onCompleted(codec.meta)
                     }
                 }
+            }
 
-                observer.onCompleted(codec.meta)
-
-            })
-            .catch(this._handleAndReThrown.bind(this))
-            .catch(error => observer.onError(error))
-            .finally(() => {
-                this._abortController = undefined
-            })
+            observer.onCompleted(codec.meta)            
+        })
+            .catch(this._catch(observer))
+            .finally(this._finally(abortController))
 
         return observer
     }
 
-    private _handleAndReThrown(error: Error & { code: string, retriable: boolean }) {
-        throw this._errorHandler(error)
+    private _headers(requestCodec: {
+        contentType: string,
+        accept: string,
+        authorization: string
+    }) {
+        const headers: Record<string, string | ReadonlyArray<string>>  = {
+            'Content-Type': requestCodec.contentType,
+            Accept: requestCodec.accept,
+            Authorization: requestCodec.authorization,
+        }
+
+        if (this._currentTx?.affinity != null) {
+            headers[this._sessionAffinityHeader] = this._currentTx.affinity
+        } 
+        return headers
+    }
+
+
+    beginTransaction(config: BeginTransactionConfig): internal.observer.ResultStreamObserver {
+        const observer = new ResultStreamObserver({
+            server: this._address,
+            afterComplete: config?.afterComplete,
+            beforeError: config.beforeError,
+            highRecordWatermark: Number.MAX_SAFE_INTEGER,
+            lowRecordWatermark: Number.MIN_SAFE_INTEGER,
+          })
+        observer.prepareToHandleSingleResponse()
+
+
+        const requestCodec = BeginTransactionRequestCodec.of(
+            this._auth,
+            config
+        )
+
+        const abortController = this._newAbortController()
+
+        this._workPipe.attach(async () => {
+            const request: RequestInit & { url: string } = {
+                url: this._getExplicityTransactionApi(config?.database!),
+                method: 'POST',
+                mode: 'cors',
+                headers: this._headers(requestCodec),
+                signal: abortController.signal,
+                body: JSON.stringify(requestCodec.body)
+            }
+    
+            this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
+
+            const res = await fetch(request.url, request) 
+            const {
+                body: rawBeginTransactionResponse,
+                headers: [contentType, affinity]
+            } = await readBodyAndReaders<RawBeginTransactionResponse>(request.url, res, 'content-type', this._sessionAffinityHeader)
+
+            this._log?.debug(`${this} ${JSON.stringify(rawBeginTransactionResponse)}`)
+            
+            const codec = BeginTransactionResponseCodec.of(this._config, contentType ?? '', rawBeginTransactionResponse);
+
+            if (codec.error != null) {
+                throw codec.error
+            }
+
+            this._currentTx = {
+                id: codec.id,
+                host: codec.host,
+                expires: codec.expires,
+                database: config?.database!,
+            }
+
+            if (affinity != null) {
+                this._currentTx.affinity = affinity
+            }
+
+            observer.onCompleted({})
+        
+        })
+            .catch(this._catch(observer))
+            .finally(this._finally(abortController))
+
+        return observer
+    }
+
+    commitTransaction(config: CommitTransactionConfig): internal.observer.ResultStreamObserver {
+        const observer = new ResultStreamObserver({
+            server: this._address,
+            afterComplete: config?.afterComplete,
+            beforeError: config.beforeError,
+            highRecordWatermark: Number.MAX_SAFE_INTEGER,
+            lowRecordWatermark: Number.MIN_SAFE_INTEGER,
+          })
+        observer.prepareToHandleSingleResponse()
+
+
+        const requestCodec = CommitTransactionRequestCodec.of(
+            this._auth,
+            config
+        )
+
+        const abortController = this._newAbortController()
+
+        this._workPipe.attach(async () => {
+            const request: RequestInit & { url: string } = {
+                url: this._getTransactionCommitApi(),
+                method: 'POST',
+                mode: 'cors',
+                headers: this._headers(requestCodec),
+                signal: abortController.signal,
+                body: JSON.stringify(requestCodec.body)
+            }
+    
+            this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
+
+            const res = await fetch(request.url, request)
+            const {
+                body: rawCommitTransactionResponse,
+                headers: [contentType]
+            } = await readBodyAndReaders<RawCommitTransactionResponse>(request.url, res, 'contentType')
+
+            this._log?.debug(`${this} ${JSON.stringify(rawCommitTransactionResponse)}`)
+            
+            const codec = CommitTransactionResponseCodec.of(this._config, contentType ?? '', rawCommitTransactionResponse);
+
+            if (codec.error) {
+                throw codec.error
+            }
+
+            this._currentTx = undefined
+
+            observer.onCompleted(codec.meta)
+        })
+            .catch(this._catch(observer))
+            .finally(this._finally(abortController))
+
+        return observer
+    }
+
+    rollbackTransaction(config: CommitTransactionConfig): internal.observer.ResultStreamObserver {
+        const observer = new ResultStreamObserver({
+            server: this._address,
+            afterComplete: config?.afterComplete,
+            beforeError: config.beforeError,
+            highRecordWatermark: Number.MAX_SAFE_INTEGER,
+            lowRecordWatermark: Number.MIN_SAFE_INTEGER,
+          })
+        observer.prepareToHandleSingleResponse()
+
+
+        const requestCodec = RollbackTransactionRequestCodec.of(
+            this._auth,
+            config
+        )
+
+        const abortController = this._newAbortController()
+
+        this._workPipe.attach(async () => {
+            const request: RequestInit & { url: string } = {
+                url: this._getTransactionApi(this._currentTx?.database!),
+                method: 'DELETE',
+                mode: 'cors',
+                headers: this._headers(requestCodec),
+                signal: abortController.signal,
+                body: JSON.stringify(requestCodec.body)
+            }
+    
+            this._log?.debug(`${this} REQUEST: ${JSON.stringify(request)} `)
+
+            const res = await fetch(request.url, request)
+            const {
+                body: rawRollbackTransactionResponse,
+                headers: [
+                    contentType
+                ]
+            } = await readBodyAndReaders<RawRollbackTransactionResponse>(request.url, res, 'content-type')
+
+            this._log?.debug(`${this} ${JSON.stringify(rawRollbackTransactionResponse)}`)
+            
+            const codec = RollbackTransactionResponseCodec.of(this._config, contentType ?? '', rawRollbackTransactionResponse);
+
+            if (codec.error) {
+                throw codec.error
+            }
+
+            this._currentTx = undefined
+
+            observer.onCompleted(codec.meta)
+        })
+            .catch(this._catch(observer))
+            .finally(this._finally(abortController))
+
+        return observer
     }
 
     private _getTransactionApi(database: string): string {
-        return this._queryEndpoint.replace('{databaseName}', database)
+        if (this._currentTx === undefined) {
+            return this._queryEndpoint.replace('{databaseName}', database)
+        }
+        return this._queryEndpoint.replace('{databaseName}',  this._currentTx.database) + `/tx/${this._currentTx.id}`
+    }
+
+    private _getTransactionCommitApi(): string {
+        return this._queryEndpoint.replace('{databaseName}', this._currentTx?.database!) + `/tx/${this._currentTx?.id}/commit`
+    }
+
+    private _getExplicityTransactionApi(database: string): string {
+        return this._queryEndpoint.replace('{databaseName}', database) + '/tx'
     }
 
     static async discover({ scheme, address }: { scheme: HttpScheme, address: internal.serverAddress.ServerAddress }): Promise<{
@@ -162,9 +358,9 @@ export default class HttpConnection extends Connection {
             .then(json => {
                 if (typeof json.query !== 'string') {
                     throw new Error('Query API is not available')
-
                 }
-                return { query: json.query, version: json.neo4j_version, edition: json.neo4j_edition }
+                const query = json.query.endsWith('/') ? json.query.substring(0, json.query.length - 1) : json.query
+                return { query, version: json.neo4j_version, edition: json.neo4j_edition }
             })
             .catch(e => {
                 throw newError(`Failure discovering endpoints. Caused by: ${e.message}`, 'SERVICE_UNAVAILABLE', e)
@@ -200,23 +396,60 @@ export default class HttpConnection extends Connection {
     }
 
     hasOngoingObservableRequests(): boolean {
-        return this._abortController != null
+        return this._abortControllers.length > 0
     }
 
     async resetAndFlush(): Promise<void> {
-        this._abortController?.abort(newError('User aborted operation.'))
+        this._abortControllers.forEach((controller) => controller.abort(newError('User aborted operation.')))
+        this._abortControllers = []
+        this._currentTx = undefined
+        this._workPipe.recover()
     }
 
     release(): Promise<void> {
+        this._workPipe.recover()
         return this._release()
     }
 
     async close(): Promise<void> {
-        this._abortController?.abort(newError('Aborted since connection is being closed.'))
+        this._abortControllers.forEach((controller) => controller.abort(newError('Aborted since connection is being closed.')))
+        this._abortControllers = []
         this._open = false
     }
 
     toString() {
         return `HttpConnection [${this._id}]`
+    }
+
+    private _catch(observer: ResultStreamObserver): (error: any) => void {
+        return error => {
+            this._currentTx = undefined
+            const newError = this._errorHandler(error)
+            observer.onError(newError)
+        }
+    }
+
+    private _finally(abortController: AbortController): (() => void) | null | undefined {
+        this._abortControllers = this._abortControllers.filter(ac => ac !== abortController)
+        return undefined
+    }
+
+    private _newAbortController (): AbortController {
+        const abortController = new AbortController()
+        this._abortControllers.push(abortController)
+        return abortController
+    }
+}
+
+async function readBodyAndReaders<T extends Record<string, unknown>> (url: string, response: Response, ...headers: string[]): Promise<{ body: T, headers: (string | null)[]}> {
+    try {
+        const text = await response.text()
+        
+        return {
+            body: text !== '' ? JSON.parse(text) : {},
+            headers: headers.map(header => response.headers.get(header))
+        }        
+    } catch (error) {
+        throw newError(`Failure accessing "${url}"`, 'SERVICE_UNAVAILABLE', error)
     }
 }
