@@ -411,7 +411,7 @@ when(config.version >= 5.23, () => describe.each(runners())('minimum requirement
 
   it('should be able to handle password rotation', async () => {
     let password = config.password + 'wrong'
-    wrapper = neo4j.wrapper(`http://${config.hostname}:${config.httpPort}`,
+    wrapper = neo4j.wrapper(`${config.httpScheme}://${config.hostname}:${config.httpPort}`,
       neo4j.authTokenManagers.basic({ tokenProvider: async () => {
           try {
             return neo4j.auth.basic(config.username, password)

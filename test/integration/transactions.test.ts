@@ -146,7 +146,7 @@ when(config.version >= 5.26, () => describe('transactions', () => {
     it('should be able to handle password rotation on executeWrite', async () => {
       let password = config.password + 'wrong'
       let passwordCall = 0
-      wrapper = neo4j.wrapper(`http://${config.hostname}:${config.httpPort}`,
+      wrapper = neo4j.wrapper(`${config.httpScheme}://${config.hostname}:${config.httpPort}`,
         neo4j.authTokenManagers.basic({ tokenProvider: async () => {
             try {
               return neo4j.auth.basic(config.username, password)

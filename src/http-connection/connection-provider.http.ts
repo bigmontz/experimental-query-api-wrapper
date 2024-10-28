@@ -105,6 +105,9 @@ export default class HttpConnectionProvider extends ConnectionProvider {
         if (this._queryEndpoint == null) {
             if (this._discoveryPromise == null) {
                 this._discoveryPromise = HttpConnection.discover({ address: this._address, scheme: this._scheme })
+                    .finally(() => {
+                        this._discoveryPromise = undefined
+                    })
             }
 
             const discoveryResult = await this._discoveryPromise
