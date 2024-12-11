@@ -101,6 +101,18 @@ when(config.version >= 5.23, () => describe.each(runners())('minimum requirement
     await expect(wrapper.verifyConnectivity({ database })).resolves.toBeDefined()
   })
 
+  it('should supportMultiDb resolves true',async () => {
+    await expect(wrapper.supportsMultiDb()).resolves.toBe(true)
+  })
+
+  it('should supportsSessionAuth resolves true',async () => {
+    await expect(wrapper.supportsSessionAuth()).resolves.toBe(true)
+  })
+
+  it('should supportsUserImpersonation resolves true',async () => {
+    await expect(wrapper.supportsUserImpersonation()).resolves.toBe(true)
+  })
+
   it.each([
     // bool
     ['bool', v(true)],
