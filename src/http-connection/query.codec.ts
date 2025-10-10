@@ -15,18 +15,21 @@
  * limitations under the License.
  */
 
-import { newError, Node, Relationship, int, error, types, Integer, Time, Date, LocalTime, Point, DateTime, LocalDateTime, Duration, isInt, isPoint, isDuration, isLocalTime, isTime, isDate, isLocalDateTime, isDateTime, isRelationship, isPath, isNode, isPathSegment, Path, PathSegment, internal, isUnboundRelationship, isVector } from "neo4j-driver-core"
+import { newError, Node, Relationship, int, error, types, Integer, Time, Date, LocalTime, Point, DateTime, LocalDateTime, Duration, isInt, isPoint, isDuration, isLocalTime, isTime, isDate, isLocalDateTime, isDateTime, isRelationship, isPath, isNode, isPathSegment, Path, PathSegment, internal, isUnboundRelationship, isVector, Vector, VectorType } from "neo4j-driver-core"
 import { RunQueryConfig } from "neo4j-driver-core/types/connection"
-import { NEO4J_QUERY_CONTENT_TYPE, encodeAuthToken, encodeTransactionBody } from "./codec"
+import { NEO4J_QUERY_CONTENT_TYPES, encodeAuthToken, encodeTransactionBody } from "./codec"
 
 export type RawQueryValueTypes = 'Null' | 'Boolean' | 'Integer' | 'Float' | 'String' |
     'Time' | 'Date' | 'LocalTime' | 'ZonedDateTime' | 'OffsetDateTime' | 'LocalDateTime' |
     'Duration' | 'Point' | 'Base64' | 'Map' | 'List' | 'Node' | 'Relationship' |
-    'Path'
+    'Path' | 'Vector'
+
+export type CoordinatesType = 'INT8' | 'INT16' | 'INT32' | 'INT64' | 'FLOAT32' | 'FLOAT64' 
 
 export type NodeShape = { _element_id: string, _labels: string[], _properties?: Record<string, RawQueryValue> }
 export type RelationshipShape = { _element_id: string, _start_node_element_id: string, _end_node_element_id: string, _type: string, _properties?: Record<string, RawQueryValue> }
 export type PathShape = (RawQueryRelationship | RawQueryNode)[]
+export type VectorShape = { coordinatesType: CoordinatesType, coordinates: string[] }
 export type RawQueryValueDef<T extends RawQueryValueTypes, V extends unknown> = { $type: T, _value: V }
 
 export type RawQueryNull = RawQueryValueDef<'Null', null>
@@ -48,13 +51,14 @@ export interface RawQueryList extends RawQueryValueDef<'List', RawQueryValue[]> 
 export type RawQueryNode = RawQueryValueDef<'Node', NodeShape>
 export type RawQueryRelationship = RawQueryValueDef<'Relationship', RelationshipShape>
 export type RawQueryPath = RawQueryValueDef<'Path', PathShape>
+export type RawQueryVector = RawQueryValueDef<'Vector', VectorShape> 
 
 
 export type RawQueryValue = RawQueryNull | RawQueryBoolean | RawQueryInteger | RawQueryFloat |
     RawQueryString | RawQueryTime | RawQueryDate | RawQueryLocalTime | RawQueryZonedDateTime |
     RawQueryOffsetDateTime | RawQueryLocalDateTime | RawQueryDuration | RawQueryPoint |
     RawQueryBinary | RawQueryMap | RawQueryList | RawQueryNode | RawQueryRelationship |
-    RawQueryPath
+    RawQueryPath | RawQueryVector
 
 export type Counters = {
     containsUpdates: boolean
@@ -136,11 +140,11 @@ export class QueryResponseCodec {
         response: RawQueryResponse): QueryResponseCodec {
 
         if (isSuccess(response)) {
-            if (contentType === NEO4J_QUERY_CONTENT_TYPE) {
+            if (NEO4J_QUERY_CONTENT_TYPES.includes(contentType)) {
                 return new QuerySuccessResponseCodec(config, response)
             }
             return new QueryFailureResponseCodec(newError(
-                `Wrong content-type. Expected "${NEO4J_QUERY_CONTENT_TYPE}", but got "${contentType}".`,
+                `Wrong content-type. Expected ${NEO4J_QUERY_CONTENT_TYPES.map(v => `"${v}"`).join(' or ')}, but got "${contentType}".`,
                 error.PROTOCOL_ERROR
             ))
         }
@@ -283,7 +287,10 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
                 return this._decodeRelationship(value._value as RelationshipShape)
             case "Path":
                 return this._decodePath(value._value as PathShape)
+            case "Vector":
+                return this._decodeVector(value._value as VectorShape)
             default:
+                console.log(value)
                 // @ts-expect-error It should never happen
                 throw newError(`Unknown type: ${value.$type}`, error.PROTOCOL_ERROR)
         }
@@ -532,6 +539,36 @@ class QuerySuccessResponseCodec extends QueryResponseCodec {
         )
     }
 
+    _decodeVector<T extends TypedArray>(value: VectorShape): Vector<T> {
+        let array : TypedArray | undefined;
+
+        switch(value.coordinatesType) {
+            case 'INT8':
+                array = new Int8Array(value.coordinates.map(v => parseInt(v)));
+                break;
+            case 'INT16':
+                array = new Int16Array(value.coordinates.map(v => parseInt(v)));
+                break;
+            case 'INT32':
+                array = new Int32Array(value.coordinates.map(v => parseInt(v)));
+                break;
+            case 'INT64':
+                array = new BigInt64Array(value.coordinates.map(v => BigInt(v)));
+                break;
+            case 'FLOAT32':
+                array = new Float32Array(value.coordinates.map(v => parseFloat(v)));
+                break;
+            case 'FLOAT64':
+                array = new Float64Array(value.coordinates.map(v => parseFloat(v)));
+                break;
+            default:
+                throw newError(`Vector with coordinates type ${value.coordinatesType} is not supported.`, error.PROTOCOL_ERROR)
+        }
+
+        // @ts-expect-error
+        return new Vector<T>(array!);
+    }
+
     _decodeMap(value: Record<string, RawQueryValue>): Record<string, unknown> {
         const result: Record<string, unknown> = {}
         for (const k of Object.keys(value)) {
@@ -680,11 +717,11 @@ export class QueryRequestCodec {
     }
 
     get contentType(): string {
-        return NEO4J_QUERY_CONTENT_TYPE
+        return NEO4J_QUERY_CONTENT_TYPES[0]
     }
 
     get accept(): string {
-        return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
+        return `${NEO4J_QUERY_CONTENT_TYPES.join(', ')}, application/json`
     }
 
     get authorization(): string {
@@ -768,7 +805,18 @@ export class QueryRequestCodec {
             }
             return { $type: 'OffsetDateTime', _value: value.toString() }
         } else if (isVector(value)) {
-            throw newError('Vectors are not supported yet on query api', error.PROTOCOL_ERROR)
+            const coordinates: string[] = []
+            for (const coordinate of value.asTypedArray()) {
+                coordinates.push(coordinate.toString());
+            }
+
+            return {    
+                $type: 'Vector',
+                _value: {
+                    coordinatesType: value.getType(),
+                    coordinates
+                }
+            }
         } else if (isRelationship(value) || isNode(value) || isPath(value) || isPathSegment(value) || isUnboundRelationship(value)) {
             throw newError('Graph types can not be ingested to the server', error.PROTOCOL_ERROR) 
         } else if (typeof value === 'object') {
@@ -793,3 +841,5 @@ function isSuccess(obj: RawQueryResponse): obj is RawQuerySuccessResponse {
     }
     return true
 }
+
+type TypedArray = Float32Array | Float64Array | Int8Array | Int16Array | Int32Array | BigInt64Array;

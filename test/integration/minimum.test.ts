@@ -18,6 +18,7 @@
 import config from './config'
 import neo4j, { Date, DateTime, Duration, LocalDateTime, LocalTime, Neo4jError, Plan, Point, ProfiledPlan, Result, Time, TransactionConfig, Wrapper, WrapperSession, WrapperSessionConfig, int } from '../../src'
 import { when, withSession as _withSession } from './test.utils'
+import { Vector } from 'neo4j-driver-core'
 
 const NESTED_OBJECT = { 
   a: { 
@@ -178,6 +179,14 @@ when(config.version >= 5.23, () => describe.each(runners())('minimum requirement
     ['LocalDateTime', v(new LocalDateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234)))],
     ['DateTime Offset and Zone', v(new DateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234), int(7200), 'Europe/Berlin'))],
     ['DateTime Offset', v(new DateTime(int(1999), int(6), int(12), int(1), int(2), int(20), int(234), int(7200)))],
+
+    // Vectors
+    ['Vector<INT8>', v(new Vector(new Int8Array([-128, 0, 127, 23, -34])))],
+    ['Vector<INT16>', v(new Vector(new Int16Array([-65536, 0, 65535, 23])))],
+    ['Vector<INT32>', v(new Vector(new Int32Array([-2_147_483_648, 0, 2_147_483_647, 23, -34])))],
+    ['Vector<INT64>', v(new Vector(new BigInt64Array([BigInt("-18446744073709551616"), BigInt("0"), BigInt("18446744073709551615"), BigInt(23), BigInt(-34)])))],
+    ['Vector<FLOAT32>', v(new Vector(new Float32Array([-3.4028235e38, -1e-45, 0, 1e-45, 127, 3.4028235e38,])))],
+    ['Vector<FLOAT64>', v(new Vector(new Float64Array([-1.7976931348623157e308, -128, -1e-308, -5e-324, 0, 5e-324, 1e-308, 127, 1.7976931348623157e308])))],
     
     // Combinations
     ['nested objects', v(NESTED_OBJECT)],

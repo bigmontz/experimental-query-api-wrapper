@@ -29,7 +29,7 @@ import {
     RollbackTransactionRequestCodecConfig, 
     RollbackTransactionResponseCodec
 } from "../../../src/http-connection/transaction.codec"
-import { NEO4J_QUERY_CONTENT_TYPE } from "../../../src/http-connection/codec"
+import { NEO4J_QUERY_CONTENT_TYPES } from "../../../src/http-connection/codec"
 
 const DEFAULT_AUTH = auth.basic('neo4j', 'password')
 
@@ -44,10 +44,10 @@ describe('BeginTransactionRequestCodec', () => {
     })
 
     describe('.accept', () => {
-        it('should return "application/vnd.neo4j.query, application/json"', () => {
+        it('should return "application/vnd.neo4j.query.v1.1, application/vnd.neo4j.query.v1.0, application/vnd.neo4j.query, application/json"', () => {
             const codec = subject()
 
-            expect(codec.accept).toBe('application/vnd.neo4j.query, application/json')
+            expect(codec.accept).toBe('application/vnd.neo4j.query.v1.1, application/vnd.neo4j.query.v1.0, application/vnd.neo4j.query, application/json')
         })
     })
 
@@ -160,7 +160,7 @@ describe('BeginTransactionRequestCodec', () => {
 })
 
 describe('BeginTransactionResponseCodec', () => {
-    const DEFAULT_CONTENT_TYPE = NEO4J_QUERY_CONTENT_TYPE
+    const DEFAULT_CONTENT_TYPE = NEO4J_QUERY_CONTENT_TYPES[0]
     const DEFAULT_RAW_RESPONSE = {
         transaction: {
             id: 'abc',
@@ -273,10 +273,10 @@ describe('CommitTransactionRequestCodec', () => {
     })
 
     describe('.accept', () => {
-        it('should return "application/vnd.neo4j.query, application/json"', () => {
+        it('should return "application/vnd.neo4j.query.v1.1, application/vnd.neo4j.query.v1.0, application/vnd.neo4j.query, application/json"', () => {
             const codec = subject()
 
-            expect(codec.accept).toBe('application/vnd.neo4j.query, application/json')
+            expect(codec.accept).toBe('application/vnd.neo4j.query.v1.1, application/vnd.neo4j.query.v1.0, application/vnd.neo4j.query, application/json')
         })
     })
 
@@ -333,7 +333,7 @@ describe('CommitTransactionRequestCodec', () => {
 })
 
 describe('CommitTransactionResponseCodec', () => {
-    const DEFAULT_CONTENT_TYPE = NEO4J_QUERY_CONTENT_TYPE
+    const DEFAULT_CONTENT_TYPE = NEO4J_QUERY_CONTENT_TYPES[0]
     const DEFAULT_RAW_RESPONSE = {
         bookmarks: ['abc']
     }
@@ -430,10 +430,10 @@ describe('RollbackTransactionRequestCodec', () => {
     })
 
     describe('.accept', () => {
-        it('should return "application/vnd.neo4j.query, application/json"', () => {
+        it('should return "application/vnd.neo4j.query.v1.1, application/vnd.neo4j.query.v1.0, application/vnd.neo4j.query, application/json"', () => {
             const codec = subject()
 
-            expect(codec.accept).toBe('application/vnd.neo4j.query, application/json')
+            expect(codec.accept).toBe('application/vnd.neo4j.query.v1.1, application/vnd.neo4j.query.v1.0, application/vnd.neo4j.query, application/json')
         })
     })
 
@@ -489,7 +489,7 @@ describe('RollbackTransactionRequestCodec', () => {
 })
 
 describe('RollbackTransactionResponseCodec', () => {
-    const DEFAULT_CONTENT_TYPE = NEO4J_QUERY_CONTENT_TYPE
+    const DEFAULT_CONTENT_TYPE = NEO4J_QUERY_CONTENT_TYPES[0]
     const DEFAULT_RAW_RESPONSE = {}
 
     describe('.meta', () => {

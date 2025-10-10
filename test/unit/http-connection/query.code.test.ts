@@ -23,18 +23,18 @@ describe('QueryRequestCodec', () => {
     const DEFAULT_QUERY = 'RETURN 1'
 
     describe('.contentType', () => {
-        it('should return "application/vnd.neo4j.query"', () => {
+        it('should return "application/vnd.neo4j.query.v1.1"', () => {
             const codec = subject()
 
-            expect(codec.contentType).toBe('application/vnd.neo4j.query')
+            expect(codec.contentType).toBe('application/vnd.neo4j.query.v1.1')
         })
     })
 
     describe('.accept', () => {
-        it('should return "application/vnd.neo4j.query, application/json"', () => {
+        it('should return "application/vnd.neo4j.query.v1.1, application/vnd.neo4j.query.v1.0, application/vnd.neo4j.query, application/json"', () => {
             const codec = subject()
 
-            expect(codec.accept).toBe('application/vnd.neo4j.query, application/json')
+            expect(codec.accept).toBe('application/vnd.neo4j.query.v1.1, application/vnd.neo4j.query.v1.0, application/vnd.neo4j.query, application/json')
         })
     })
 
@@ -166,6 +166,12 @@ describe('QueryRequestCodec', () => {
             ['CARTESIAN Point 2D', v(new Point(int(7203), 1.2, 3.4), { '$type': 'Point', _value: 'SRID=7203;POINT (1.2 3.4)' })],
             ['WGS Point 3D', v(new Point(int(4979), 1.2, 3.4, 5.6), { '$type': 'Point', _value: 'SRID=4979;POINT Z (1.2 3.4 5.6)' })],
             ['CARTESIAN Point 3D', v(new Point(int(9157), 1.2, 3.4, 5.6), { '$type': 'Point', _value: 'SRID=9157;POINT Z (1.2 3.4 5.6)' })],
+            ['Vector<INT8>', v(new Vector(new Int8Array([-128, 0, 127])), { '$type': 'Vector', _value: { coordinatesType: 'INT8', coordinates: ["-128", "0", "127"]  }})],
+            ['Vector<INT16>', v(new Vector(new Int16Array([-1273, 0, 1283])), { '$type': 'Vector', _value: { coordinatesType: 'INT16', coordinates: ["-1273", "0", "1283"]  }})],
+            ['Vector<INT32>', v(new Vector(new Int32Array([-1273, 0, 1283])), { '$type': 'Vector', _value: { coordinatesType: 'INT32', coordinates: ["-1273", "0", "1283"]  }})],
+            ['Vector<INT64>', v(new Vector(new BigInt64Array([BigInt(-1273), BigInt(0), BigInt(1283)])), { '$type': 'Vector', _value: { coordinatesType: 'INT64', coordinates: ["-1273", "0", "1283"]  }})],
+            ['Vector<FLOAT32>', v(new Vector(new Float32Array([-1273.25, 0, 1283.50])), { '$type': 'Vector', _value: { coordinatesType: 'FLOAT32', coordinates: ["-1273.25", "0", "1283.5"]  }})],
+            ['Vector<FLOAT64>', v(new Vector(new Float64Array([-1273.123, 0, 1283])), { '$type': 'Vector', _value: { coordinatesType: 'FLOAT64', coordinates: ["-1273.123", "0", "1283"]  }})]
         ])('should handle parameters of type %s', (_, [param, expected]) => {
             const codec = subject({
                 parameters: {
@@ -208,22 +214,6 @@ describe('QueryRequestCodec', () => {
             })
 
             expect(() => codec.body).toThrow('Graph types can not be ingested to the server')
-        })
-
-        it.each([
-            ['Vector<INT8>', new Vector(new Int8Array([-127, 0, 128]))],
-            ['Vector<INT16>', new Vector(new Int16Array([-1273, 0, 1283]))],
-            ['Vector<INT32>', new Vector(new Int32Array([-1273, 0, 1283]))],
-            ['Vector<INT64>', new Vector(new BigInt64Array([BigInt(-1273), BigInt(0), BigInt(1283)]))],
-            ['Vector<FLOAT32>', new Vector(new Float32Array([-1273.13, 0, 1283.34]))],
-            ['Vector<FLOAT64>', new Vector(new Float64Array([-1273.123, 0, 1283]))]
-        ])('should not support (%) as parameter', (_, param) => {
-            const codec = subject({
-                parameters: {
-                    param
-                }
-            })
-            expect(() => codec.body).toThrow('Vectors are not supported yet on query api')
         })
 
     })
@@ -333,7 +323,7 @@ describe('QueryResponseCodec', () => {
             })
 
             expect(codec.error).toBeDefined()
-            expect(codec.error?.message).toEqual('Wrong content-type. Expected "application/vnd.neo4j.query", but got "application/json".')
+            expect(codec.error?.message).toEqual('Wrong content-type. Expected "application/vnd.neo4j.query.v1.1" or "application/vnd.neo4j.query.v1.0" or "application/vnd.neo4j.query", but got "application/json".')
             // @ts-expect-error
             expect(codec.error?.code).toEqual('ProtocolError')
         })
@@ -1655,7 +1645,8 @@ describe('QueryResponseCodec', () => {
                     [{ $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' }],
                     [{ $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' }],
                     [{ $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' }],
-                    [{ $type: 'Duration', _value: 'P0M14DT16S' }]
+                    [{ $type: 'Duration', _value: 'P0M14DT16S' }],
+                    [{ $type: 'Vector', _value: { coordinatesType: 'INT8', coordinates: ["-128", "0", "127"]  }}]
                 ], [
                         [null],
                         [false],
@@ -1672,25 +1663,29 @@ describe('QueryResponseCodec', () => {
                         [new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll')],
                         [new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600), 'Antarctica/Troll')],
                         [new LocalDateTime(toInt(2001), toInt(5), toInt(3), toInt(13), toInt(45), toInt(0), toInt(3404004))],
-                        [new Duration(toInt(0), toInt(14), toInt(16), toInt(0))]
+                        [new Duration(toInt(0), toInt(14), toInt(16), toInt(0))],
+                        [new Vector(new Int8Array([-128, 0, 127]))]
                     ], config],
                 ['one line and multiple values', [
-                    [{ $type: 'Null', _value: null },
-                    { $type: 'Boolean', _value: false },
-                    { $type: 'Integer', _value: '123' },
-                    { $type: 'Float', _value: '-1234' },
-                    { $type: 'String', _value: 'Hello, Greg!' },
-                    { $type: 'Base64', _value: 'YGCwFw==' },
-                    { $type: 'List', _value: [{ $type: 'String', _value: 'A' }, { $type: 'Integer', _value: '12' }] },
-                    { $type: 'Map', _value: { a: { $type: 'String', _value: 'b' }, c: { $type: 'List', _value: [{ $type: 'String', _value: 'd' }] } } },
-                    { $type: 'Date', _value: '1988-08-23' },
-                    { $type: 'Time', _value: '12:50:35.556000000+01:00' },
-                    { $type: 'LocalTime', _value: '12:50:35.556000000' },
-                    { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
-                    { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' },
-                    { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
-                    { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
-                    { $type: 'Duration', _value: 'P0M14DT16S' }]
+                    [
+                        { $type: 'Null', _value: null },
+                        { $type: 'Boolean', _value: false },
+                        { $type: 'Integer', _value: '123' },
+                        { $type: 'Float', _value: '-1234' },
+                        { $type: 'String', _value: 'Hello, Greg!' },
+                        { $type: 'Base64', _value: 'YGCwFw==' },
+                        { $type: 'List', _value: [{ $type: 'String', _value: 'A' }, { $type: 'Integer', _value: '12' }] },
+                        { $type: 'Map', _value: { a: { $type: 'String', _value: 'b' }, c: { $type: 'List', _value: [{ $type: 'String', _value: 'd' }] } } },
+                        { $type: 'Date', _value: '1988-08-23' },
+                        { $type: 'Time', _value: '12:50:35.556000000+01:00' },
+                        { $type: 'LocalTime', _value: '12:50:35.556000000' },
+                        { $type: 'OffsetDateTime', _value: '1988-08-23T12:50:35.556000000-01:00' },
+                        { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' },
+                        { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
+                        { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
+                        { $type: 'Duration', _value: 'P0M14DT16S' },
+                        { $type: 'Vector', _value: { coordinatesType: 'INT8', coordinates: ["-128", "0", "127"]  }}
+                    ]
                 ], [
                         [null,
                             false,
@@ -1707,7 +1702,9 @@ describe('QueryResponseCodec', () => {
                             new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll'),
                             new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600), 'Antarctica/Troll'),
                             new LocalDateTime(toInt(2001), toInt(5), toInt(3), toInt(13), toInt(45), toInt(0), toInt(3404004)),
-                            new Duration(toInt(0), toInt(14), toInt(16), toInt(0))]
+                            new Duration(toInt(0), toInt(14), toInt(16), toInt(0)),
+                            new Vector(new Int8Array([-128, 0, 127]))
+                        ]
                     ], config],
                     ...[
                         [
@@ -1745,7 +1742,8 @@ describe('QueryResponseCodec', () => {
                                     zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' },
                                     zonedAndOffsetDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
                                     localDateTime: { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
-                                    duration: { $type: 'Duration', _value: 'P0M14DT16S' }
+                                    duration: { $type: 'Duration', _value: 'P0M14DT16S' },
+                                    vector8: { $type: 'Vector', _value: { coordinatesType: 'INT8', coordinates: ["-128", "0", "127"]  }}
                                 }
                             },
                             new Node(undefined as any, ['abcd', 'xvo'], {
@@ -1764,7 +1762,8 @@ describe('QueryResponseCodec', () => {
                                 zonedDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll'),
                                 zonedAndOffsetDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600), 'Antarctica/Troll'),
                                 localDateTime: new LocalDateTime(toInt(2001), toInt(5), toInt(3), toInt(13), toInt(45), toInt(0), toInt(3404004)),
-                                duration: new Duration(toInt(0), toInt(14), toInt(16), toInt(0))
+                                duration: new Duration(toInt(0), toInt(14), toInt(16), toInt(0)),
+                                vector8: new Vector(new Int8Array([-128, 0, 127]))
                             }, 'the element id')
                         ],
                     ].map(([_value, expected]) => [`Node (value=${_value})`, [[{ $type: 'Node', _value }]], [[expected]], config]),
@@ -1813,7 +1812,8 @@ describe('QueryResponseCodec', () => {
                                     zonedDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000[Antarctica/Troll]' },
                                     zonedAndOffsetDateTime: { $type: 'ZonedDateTime', _value: '1988-08-23T12:50:35.556000000+01:00[Antarctica/Troll]' },
                                     localDateTime: { $type: 'LocalDateTime', _value: '2001-05-03T13:45:00.003404004' },
-                                    duration: { $type: 'Duration', _value: 'P0M14DT16S' }
+                                    duration: { $type: 'Duration', _value: 'P0M14DT16S' },
+                                    vector8: { $type: 'Vector', _value: { coordinatesType: 'INT8', coordinates: ["-128", "0", "127"]  }}
                                 }
                             },
                             new Relationship(undefined as any, undefined as any, undefined as any, 'mitt type', {
@@ -1832,7 +1832,8 @@ describe('QueryResponseCodec', () => {
                                 zonedDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), undefined, 'Antarctica/Troll'),
                                 zonedAndOffsetDateTime: new DateTime(toInt(1988), toInt(8), toInt(23), toInt(12), toInt(50), toInt(35), toInt(556000000), toInt(3600), 'Antarctica/Troll'),
                                 localDateTime: new LocalDateTime(toInt(2001), toInt(5), toInt(3), toInt(13), toInt(45), toInt(0), toInt(3404004)),
-                                duration: new Duration(toInt(0), toInt(14), toInt(16), toInt(0))
+                                duration: new Duration(toInt(0), toInt(14), toInt(16), toInt(0)),
+                                vector8: new Vector(new Int8Array([-128, 0, 127]))
                             }, 'the element id', 'the start node element id', 'the end node element id')
                         ],
                     ].map(([_value, expected]) => [`Relationship (value=${_value})`, [[{ $type: 'Relationship', _value }]], [[expected]], config]),

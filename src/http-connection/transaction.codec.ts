@@ -17,7 +17,7 @@
 
 import { error, newError, types } from "neo4j-driver-core"
 import { BeginTransactionConfig } from "neo4j-driver-core/types/connection"
-import { NEO4J_QUERY_CONTENT_TYPE, encodeAuthToken, encodeTransactionBody } from "./codec"
+import { NEO4J_QUERY_CONTENT_TYPES, encodeAuthToken, encodeTransactionBody } from "./codec"
 
 export type BeginTransactionRequestCodecConfig = Pick<BeginTransactionConfig, 'bookmarks' | 'txConfig' | 'mode' | 'impersonatedUser'>
 export type CommitTransactionRequestCodecConfig = {}
@@ -67,7 +67,7 @@ export class BeginTransactionRequestCodec {
     }
 
     get accept (): string {
-        return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
+        return `${NEO4J_QUERY_CONTENT_TYPES.join(', ')}, application/json`
     }
 
     get authorization(): string {
@@ -195,7 +195,7 @@ export class CommitTransactionRequestCodec {
     }
 
     get accept (): string {
-        return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
+        return `${NEO4J_QUERY_CONTENT_TYPES.join(', ')}, application/json`
     }
 
     get body () : Record<string, unknown> {
@@ -298,7 +298,7 @@ export class RollbackTransactionRequestCodec {
     }
 
     get accept (): string {
-        return `${NEO4J_QUERY_CONTENT_TYPE}, application/json`
+        return `${NEO4J_QUERY_CONTENT_TYPES.join(', ')}, application/json`
     }
 
     get authorization(): string {
